@@ -142,10 +142,38 @@ The worker can automatically download your character training datasets from Clou
 
 ## Deploying to RunPod
 
-1. Push this repo to GitHub
-2. Create new Serverless GPU Worker on RunPod
-3. Select GPU with at least 16GB VRAM (recommended: 24GB+)
-4. Connect your GitHub repo → build → deploy
+1. **Create Serverless Worker**:
+   - Go to RunPod → Serverless → Create Worker
+   - Select GPU with at least 24GB VRAM (RTX 3090/4090 or A100 recommended)
+
+2. **Connect Repository**:
+   - Repository: `https://github.com/101world/character-last`
+   - Branch: `main`
+   - Handler: `handler.py`
+   - Docker Context: `/`
+
+3. **Set Environment Variables**:
+   ```
+   CLOUDFLARE_ACCOUNT_ID=your_account_id
+   CLOUDFLARE_R2_ACCESS_KEY_ID=your_access_key
+   CLOUDFLARE_R2_SECRET_ACCESS_KEY=your_secret_key
+   R2_BUCKET_NAME=your_bucket_name
+   HUGGINGFACE_TOKEN=your_huggingface_token
+   ```
+
+4. **Configure Timeouts** (Critical for FLUX training):
+   - **Execution Timeout**: 7200 seconds (2 hours) - for long training jobs
+   - **Startup Timeout**: 600 seconds (10 minutes) - for model loading
+   - **HTTP Timeout**: 7200 seconds (2 hours) - for API calls
+
+5. **Deploy**: Monitor the build process (30-60 minutes for initial setup)
+
+### Training Time Estimates:
+- **Small Dataset** (10-50 images): 30-60 minutes
+- **Medium Dataset** (50-200 images): 1-3 hours
+- **Large Dataset** (200+ images): 3-6+ hours
+
+**⚠️ Important**: Set execution timeout longer than your expected training time!
 
 ## Usage Examples
 
