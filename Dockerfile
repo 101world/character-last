@@ -155,6 +155,9 @@ echo "======================================"\n\
 echo "Health check completed at $(date)"' > /workspace/health_check.sh && chmod +x /workspace/health_check.sh
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
 # Copy models from builder (cached layer)
 COPY --from=builder /workspace/models /workspace/models
 
@@ -181,7 +184,7 @@ COPY handler.py /workspace/
 RUN mkdir -p /workspace/output
 
 # Verify CUDA installation
-RUN python3 -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}')"
+RUN python3 -c "import torch; print('PyTorch:', torch.__version__); print('CUDA Available:', torch.cuda.is_available()); print('CUDA Version:', torch.version.cuda if torch.cuda.is_available() else 'N/A')"
 
 # Set proper permissions
 RUN chmod +x /workspace/handler.py
