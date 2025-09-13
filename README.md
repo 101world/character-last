@@ -75,11 +75,11 @@ The worker automatically downloads and includes:
 
 **Cloudflare R2 Integration:**
 - `use_r2`: Enable Cloudflare R2 dataset download (boolean, default: false)
-- `r2_access_key`: Your R2 access key (string)
-- `r2_secret_key`: Your R2 secret key (string)
-- `r2_endpoint`: R2 endpoint URL (string)
-- `r2_bucket`: R2 bucket name (string)
-- `r2_prefix`: Prefix/path in R2 bucket (string, default: "")
+- `CLOUDFLARE_R2_ACCESS_KEY_ID`: Your R2 access key (string)
+- `CLOUDFLARE_R2_SECRET_ACCESS_KEY`: Your R2 secret key (string)
+- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID (string)
+- `R2_BUCKET_NAME`: R2 bucket name (string)
+- `r2_prefix`: Prefix/path in R2 bucket (string, default: "kohya/Dataset/riya_bhatu_v1/Character/")
 
 **Training Hyperparameters:**
 - `learning_rate`: Learning rate (string, default: "1e-4")
@@ -172,11 +172,11 @@ const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
 
       // Cloudflare R2 integration for your web app
       use_r2: true,
-      r2_access_key: "your_r2_access_key",
-      r2_secret_key: "your_r2_secret_key",
-      r2_endpoint: "https://your-account-id.r2.cloudflarestorage.com",
-      r2_bucket: "character-datasets",
-      r2_prefix: "my-character/photos/",
+      CLOUDFLARE_R2_ACCESS_KEY_ID: "ef926435442c79cb22a8397939f3f878",
+      CLOUDFLARE_R2_SECRET_ACCESS_KEY: "da8c672469940a0b338d86c65b386fc7fe933549706e3aff10ce6d570ec82eb3",
+      CLOUDFLARE_ACCOUNT_ID: "ced616f33f6492fd708a8e897b61b953",
+      R2_BUCKET_NAME: "the-social-twin-storage",
+      r2_prefix: "kohya/Dataset/riya_bhatu_v1/Character/",
 
       // Custom training parameters
       learning_rate: "2e-4",
@@ -205,11 +205,11 @@ const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
 
     // R2 integration
     use_r2: true,
-    r2_access_key: "your_r2_access_key",
-    r2_secret_key: "your_r2_secret_key",
-    r2_endpoint: "https://your-account-id.r2.cloudflarestorage.com",
-    r2_bucket: "character-datasets",
-    r2_prefix: "my-character/"
+    CLOUDFLARE_R2_ACCESS_KEY_ID: "ef926435442c79cb22a8397939f3f878",
+    CLOUDFLARE_R2_SECRET_ACCESS_KEY: "da8c672469940a0b338d86c65b386fc7fe933549706e3aff10ce6d570ec82eb3",
+    CLOUDFLARE_ACCOUNT_ID: "ced616f33f6492fd708a8e897b61b953",
+    R2_BUCKET_NAME: "the-social-twin-storage",
+    r2_prefix: "kohya/Dataset/riya_bhatu_v1/Character/"
   }
 }
 ```

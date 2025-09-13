@@ -10,16 +10,16 @@
     "max_caption_length": 75,
 
     "use_r2": true,
-    "r2_access_key": "your_r2_access_key_here",
-    "r2_secret_key": "your_r2_secret_key_here",
-    "r2_endpoint": "https://your-account-id.r2.cloudflarestorage.com",
-    "r2_bucket": "character-training-data",
-    "r2_prefix": "character-photos/",
+    "CLOUDFLARE_R2_ACCESS_KEY_ID": "ef926435442c79cb22a8397939f3f878",
+    "CLOUDFLARE_R2_SECRET_ACCESS_KEY": "da8c672469940a0b338d86c65b386fc7fe933549706e3aff10ce6d570ec82eb3",
+    "CLOUDFLARE_ACCOUNT_ID": "ced616f33f6492fd708a8e897b61b953",
+    "R2_BUCKET_NAME": "the-social-twin-storage",
+    "r2_prefix": "kohya/Dataset/riya_bhatu_v1/Character/",
 
     "learning_rate": "1e-4",
-    "max_train_steps": "1000",
+    "max_train_steps": "500",
     "train_batch_size": "1",
     "network_dim": "16",
-    "save_every_n_steps": "500"
+    "save_every_n_steps": "250"
   }
 }

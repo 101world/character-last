@@ -137,13 +137,17 @@ def handler(event):
         caption_method = input_data.get("caption_method", "blip")  # "blip", "clip", or "existing"
         max_caption_length = input_data.get("max_caption_length", 75)
 
-        # Cloudflare R2 parameters
+        # Cloudflare R2 parameters - using exact environment variable names
         use_r2 = input_data.get("use_r2", False)
-        r2_access_key = input_data.get("r2_access_key")
-        r2_secret_key = input_data.get("r2_secret_key")
-        r2_endpoint = input_data.get("r2_endpoint")
-        r2_bucket = input_data.get("r2_bucket")
-        r2_prefix = input_data.get("r2_prefix", "")
+        r2_access_key = input_data.get("CLOUDFLARE_R2_ACCESS_KEY_ID")
+        r2_secret_key = input_data.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
+        r2_account_id = input_data.get("CLOUDFLARE_ACCOUNT_ID")
+        r2_bucket = input_data.get("R2_BUCKET_NAME")
+        r2_prefix = input_data.get("r2_prefix", "kohya/Dataset/riya_bhatu_v1/Character/")
+        
+        # Construct R2 endpoint from account ID
+        if r2_account_id:
+            r2_endpoint = f"https://{r2_account_id}.r2.cloudflarestorage.com"
 
         # Training hyperparameters
         learning_rate = input_data.get("learning_rate", "1e-4")
