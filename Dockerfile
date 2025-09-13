@@ -48,11 +48,31 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Upgrade pip and install PyTorch with CUDA support
 RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124
+RUN set -e && \
+    echo "Installing PyTorch with CUDA 12.4 support..." && \
+    for i in 1 2 3; do \
+        if pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu124; then \
+            echo "PyTorch installation successful"; \
+            break; \
+        else \
+            echo "Attempt $i failed, retrying in 10 seconds..."; \
+            sleep 10; \
+        fi; \
+    done
 
 # Install Python dependencies
 COPY requirements.txt /workspace/
-RUN pip install --no-cache-dir -r requirements.txt
+RUN set -e && \
+    echo "Installing Python dependencies..." && \
+    for i in 1 2 3; do \
+        if pip install --no-cache-dir -r requirements.txt; then \
+            echo "Python dependencies installation successful"; \
+            break; \
+        else \
+            echo "Attempt $i failed, retrying in 10 seconds..."; \
+            sleep 10; \
+        fi; \
+    done
 
 # Download models in builder stage (cached)
 RUN mkdir -p /workspace/models && \
