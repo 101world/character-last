@@ -20,3 +20,11 @@ tensorboard
 opencv-python
 Pillow>=9.5.0
 diffusers>=0.27.0
+
+# Captioning dependencies
+open_clip_torch>=2.24.0
+sentence-transformers>=2.2.2
+ftfy
+regex
+boto3>=1.28.0  # For Cloudflare R2 integration
+botocore>=1.31.0

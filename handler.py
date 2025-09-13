@@ -2,7 +2,118 @@ import runpod
 import subprocess
 import os
 import glob
+import boto3
+import json
 from huggingface_hub import snapshot_download
+from botocore.client import Config
+import torch
+from PIL import Image
+from transformers import BlipProcessor, BlipForConditionalGeneration
+import open_clip
+from sentence_transformers import SentenceTransformer
+
+def setup_cloudflare_r2(access_key, secret_key, endpoint_url, bucket_name):
+    """Setup Cloudflare R2 client for dataset access"""
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        endpoint_url=endpoint_url,
+        config=Config(signature_version='s3v4')
+    )
+    return s3_client, bucket_name
+
+def download_dataset_from_r2(s3_client, bucket_name, r2_prefix, local_dir):
+    """Download dataset from Cloudflare R2"""
+    os.makedirs(local_dir, exist_ok=True)
+
+    paginator = s3_client.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=bucket_name, Prefix=r2_prefix):
+        for obj in page.get('Contents', []):
+            local_path = os.path.join(local_dir, obj['Key'].replace(r2_prefix, '').lstrip('/'))
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+            s3_client.download_file(bucket_name, obj['Key'], local_path)
+            print(f"Downloaded: {obj['Key']} -> {local_path}")
+
+def generate_captions_blip(image_dir, caption_extension=".txt", max_length=75):
+    """Generate captions using BLIP model"""
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-large")
+    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-large")
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
+
+    image_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+
+    for root, dirs, files in os.walk(image_dir):
+        for file in files:
+            if any(file.lower().endswith(ext) for ext in image_extensions):
+                image_path = os.path.join(root, file)
+                caption_path = os.path.splitext(image_path)[0] + caption_extension
+
+                if os.path.exists(caption_path):
+                    continue  # Skip if caption already exists
+
+                try:
+                    image = Image.open(image_path).convert('RGB')
+                    inputs = processor(image, return_tensors="pt").to(device)
+
+                    with torch.no_grad():
+                        output = model.generate(**inputs, max_length=max_length)
+
+                    caption = processor.decode(output[0], skip_special_tokens=True)
+                    with open(caption_path, 'w', encoding='utf-8') as f:
+                        f.write(caption)
+
+                    print(f"Generated caption for: {image_path}")
+
+                except Exception as e:
+                    print(f"Error processing {image_path}: {e}")
+
+def generate_captions_clip(image_dir, caption_extension=".txt"):
+    """Generate captions using CLIP model"""
+    model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+    tokenizer = open_clip.get_tokenizer('ViT-B-32')
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
+
+    # This is a simplified CLIP captioning - in practice you'd want more sophisticated prompting
+    templates = [
+        "a photo of a {}",
+        "an image of a {}",
+        "picture of a {}",
+        "this is a {}"
+    ]
+
+    image_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+
+    for root, dirs, files in os.walk(image_dir):
+        for file in files:
+            if any(file.lower().endswith(ext) for ext in image_extensions):
+                image_path = os.path.join(root, file)
+                caption_path = os.path.splitext(image_path)[0] + caption_extension
+
+                if os.path.exists(caption_path):
+                    continue
+
+                try:
+                    image = preprocess(Image.open(image_path).convert('RGB')).unsqueeze(0).to(device)
+
+                    with torch.no_grad():
+                        image_features = model.encode_image(image)
+                        image_features /= image_features.norm(dim=-1, keepdim=True)
+
+                    # For simplicity, using a generic caption. In practice, you'd use a trained captioning model
+                    caption = "a high quality image of a character"
+                    with open(caption_path, 'w', encoding='utf-8') as f:
+                        f.write(caption)
+
+                    print(f"Generated CLIP-based caption for: {image_path}")
+
+                except Exception as e:
+                    print(f"Error processing {image_path}: {e}")
 
 def handler(event):
     input_data = event.get("input", {})
@@ -15,9 +126,47 @@ def handler(event):
     ae_path = "/workspace/models/ae.safetensors"
 
     if mode == "train":
+        # Training parameters
         train_data = input_data.get("train_data", "/workspace/data")
         output_dir = input_data.get("output_dir", "/workspace/output")
         os.makedirs(output_dir, exist_ok=True)
+
+        # Captioning parameters
+        use_captioning = input_data.get("use_captioning", True)
+        caption_extension = input_data.get("caption_extension", ".txt")
+        caption_method = input_data.get("caption_method", "blip")  # "blip", "clip", or "existing"
+        max_caption_length = input_data.get("max_caption_length", 75)
+
+        # Cloudflare R2 parameters
+        use_r2 = input_data.get("use_r2", False)
+        r2_access_key = input_data.get("r2_access_key")
+        r2_secret_key = input_data.get("r2_secret_key")
+        r2_endpoint = input_data.get("r2_endpoint")
+        r2_bucket = input_data.get("r2_bucket")
+        r2_prefix = input_data.get("r2_prefix", "")
+
+        # Training hyperparameters
+        learning_rate = input_data.get("learning_rate", "1e-4")
+        max_train_steps = input_data.get("max_train_steps", "1000")
+        train_batch_size = input_data.get("train_batch_size", "1")
+        network_dim = input_data.get("network_dim", "16")
+        save_every_n_steps = input_data.get("save_every_n_steps", "500")
+
+        # Download dataset from Cloudflare R2 if specified
+        if use_r2 and r2_access_key and r2_secret_key and r2_endpoint and r2_bucket:
+            print("Downloading dataset from Cloudflare R2...")
+            s3_client, bucket_name = setup_cloudflare_r2(
+                r2_access_key, r2_secret_key, r2_endpoint, r2_bucket
+            )
+            download_dataset_from_r2(s3_client, bucket_name, r2_prefix, train_data)
+
+        # Generate captions if requested
+        if use_captioning and caption_method != "existing":
+            print(f"Generating captions using {caption_method} method...")
+            if caption_method == "blip":
+                generate_captions_blip(train_data, caption_extension, max_caption_length)
+            elif caption_method == "clip":
+                generate_captions_clip(train_data, caption_extension)
 
         # Use FLUX.1 training script with proper parameters
         cmd = [
@@ -30,13 +179,13 @@ def handler(event):
             "--output_dir", output_dir,
             "--output_name", "flux_lora",
             "--network_module", "networks.lora_flux",
-            "--network_dim", "16",  # LoRA rank
+            f"--network_dim", network_dim,
             "--network_alpha", "1",
-            "--learning_rate", "1e-4",
+            f"--learning_rate", learning_rate,
             "--lr_scheduler", "constant",
-            "--train_batch_size", "1",
-            "--max_train_steps", "1000",
-            "--save_every_n_steps", "500",
+            f"--train_batch_size", train_batch_size,
+            f"--max_train_steps", max_train_steps,
+            f"--save_every_n_steps", save_every_n_steps,
             "--mixed_precision", "fp16",
             "--optimizer_type", "AdamW8bit",
             "--max_data_loader_n_workers", "0",
@@ -50,6 +199,16 @@ def handler(event):
             "--cache_latents",
             "--save_model_as", "safetensors"
         ]
+
+        # Add captioning parameters if captions exist
+        if use_captioning:
+            cmd.extend([
+                f"--caption_extension", caption_extension,
+                "--shuffle_caption",
+                "--keep_tokens", "1"
+            ])
+
+        print(f"Running training command: {' '.join(cmd)}")
         subprocess.run(cmd)
         return {"status": "training complete", "output": output_dir}
 

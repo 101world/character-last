@@ -1,7 +1,25 @@
 {
   "input": {
-    "mode": "infer",
-    "model": "black-forest-labs/FLUX.1-dev",
-    "prompt": "a cinematic portrait of Rayhaan in a dark blue denim jacket, photorealistic, high detail, 8k"
+    "mode": "train",
+    "train_data": "/workspace/data",
+    "output_dir": "/workspace/output",
+
+    "use_captioning": true,
+    "caption_method": "blip",
+    "caption_extension": ".txt",
+    "max_caption_length": 75,
+
+    "use_r2": true,
+    "r2_access_key": "your_r2_access_key_here",
+    "r2_secret_key": "your_r2_secret_key_here",
+    "r2_endpoint": "https://your-account-id.r2.cloudflarestorage.com",
+    "r2_bucket": "character-training-data",
+    "r2_prefix": "character-photos/",
+
+    "learning_rate": "1e-4",
+    "max_train_steps": "1000",
+    "train_batch_size": "1",
+    "network_dim": "16",
+    "save_every_n_steps": "500"
   }
 }

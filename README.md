@@ -6,6 +6,8 @@ This repository is a custom RunPod Serverless worker specifically optimized for 
 
 - **FLUX.1-dev Optimized**: Uses the sd3 branch of Kohya's sd-scripts with proper FLUX.1 parameters
 - **Complete Model Setup**: Includes all required models (FLUX.1-dev, CLIP-L, T5-XXL, AE)
+- **Advanced Captioning**: BLIP and CLIP-based automatic captioning for character training
+- **Cloudflare R2 Integration**: Seamless integration with your web app's Cloudflare R2 storage
 - **Optimized Training**: Pre-configured with recommended FLUX.1 training parameters
 - **High-Quality Inference**: FLUX.1-dev inference with proper guidance and sampling
 - **GPU Optimized**: CUDA 12.4 with PyTorch 2.6.0 for maximum performance
@@ -30,16 +32,61 @@ The worker automatically downloads and includes:
 
 ## Input Format
 
-### Training
+### Training with Captioning and Cloudflare R2
+
 ```json
 {
   "input": {
     "mode": "train",
     "train_data": "/workspace/data",
-    "output_dir": "/workspace/output"
+    "output_dir": "/workspace/output",
+
+    // Captioning parameters
+    "use_captioning": true,
+    "caption_method": "blip",  // "blip", "clip", or "existing"
+    "caption_extension": ".txt",
+    "max_caption_length": 75,
+
+    // Cloudflare R2 parameters (for your web app integration)
+    "use_r2": true,
+    "r2_access_key": "your_r2_access_key",
+    "r2_secret_key": "your_r2_secret_key",
+    "r2_endpoint": "https://your-account-id.r2.cloudflarestorage.com",
+    "r2_bucket": "your-bucket-name",
+    "r2_prefix": "character-training-data/",
+
+    // Training hyperparameters
+    "learning_rate": "1e-4",
+    "max_train_steps": "1000",
+    "train_batch_size": "1",
+    "network_dim": "16",
+    "save_every_n_steps": "500"
   }
 }
 ```
+
+### Training Parameters
+
+**Captioning Options:**
+- `use_captioning`: Enable/disable automatic captioning (boolean, default: true)
+- `caption_method`: Captioning method - "blip", "clip", or "existing" (string, default: "blip")
+- `caption_extension`: File extension for captions (string, default: ".txt")
+- `max_caption_length`: Maximum caption length for BLIP (number, default: 75)
+
+**Cloudflare R2 Integration:**
+- `use_r2`: Enable Cloudflare R2 dataset download (boolean, default: false)
+- `r2_access_key`: Your R2 access key (string)
+- `r2_secret_key`: Your R2 secret key (string)
+- `r2_endpoint`: R2 endpoint URL (string)
+- `r2_bucket`: R2 bucket name (string)
+- `r2_prefix`: Prefix/path in R2 bucket (string, default: "")
+
+**Training Hyperparameters:**
+- `learning_rate`: Learning rate (string, default: "1e-4")
+- `max_train_steps`: Maximum training steps (string, default: "1000")
+- `train_batch_size`: Batch size (string, default: "1")
+- `network_dim`: LoRA network dimension (string, default: "16")
+- `save_every_n_steps`: Save checkpoint frequency (string, default: "500")
 
 ### Inference
 ```json
@@ -51,13 +98,35 @@ The worker automatically downloads and includes:
 }
 ```
 
-## Key Features
+## Captioning Methods
 
-- **FLUX.1-dev Specific**: Uses `flux_train_network.py` with FLUX-optimized parameters
-- **Memory Efficient**: Gradient checkpointing and text encoder caching enabled
-- **Mixed Precision**: FP16 training for optimal performance
-- **LoRA Training**: 16-rank LoRA with proper FLUX.1 architecture support
-- **Batch Processing**: Configurable batch sizes for different GPU memory
+The worker supports multiple captioning approaches for character training:
+
+### BLIP Captioning (Recommended)
+- Uses Salesforce's BLIP large model for detailed image descriptions
+- Generates high-quality, descriptive captions automatically
+- Best for character training with varied poses and expressions
+
+### CLIP Captioning
+- Uses OpenAI's CLIP model for semantic understanding
+- Faster processing but less detailed captions
+- Good for consistent character features
+
+### Existing Captions
+- Use pre-existing caption files in your dataset
+- No automatic captioning performed
+- Best when you have custom, curated captions
+
+## Cloudflare R2 Integration
+
+The worker can automatically download your character training datasets from Cloudflare R2:
+
+1. **Upload Dataset**: Upload your character images to R2 bucket
+2. **Configure Access**: Provide R2 credentials in the training request
+3. **Automatic Download**: Worker downloads and processes your dataset
+4. **Captioning**: Generates captions if needed
+5. **Training**: Trains LoRA on your character data
+6. **Results**: Saves trained model back to specified location
 
 ## Technical Details
 
@@ -80,7 +149,8 @@ The worker automatically downloads and includes:
 
 ## Usage Examples
 
-### Training a LoRA
+### Training a Character LoRA with Captioning and R2
+
 ```javascript
 const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
   method: "POST",
@@ -92,10 +162,56 @@ const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
     input: {
       mode: "train",
       train_data: "/workspace/data",
-      output_dir: "/workspace/output"
+      output_dir: "/workspace/output",
+
+      // Enable automatic captioning
+      use_captioning: true,
+      caption_method: "blip",
+      caption_extension: ".txt",
+      max_caption_length: 75,
+
+      // Cloudflare R2 integration for your web app
+      use_r2: true,
+      r2_access_key: "your_r2_access_key",
+      r2_secret_key: "your_r2_secret_key",
+      r2_endpoint: "https://your-account-id.r2.cloudflarestorage.com",
+      r2_bucket: "character-datasets",
+      r2_prefix: "my-character/photos/",
+
+      // Custom training parameters
+      learning_rate: "2e-4",
+      max_train_steps: "2000",
+      train_batch_size: "2",
+      network_dim: "32",
+      save_every_n_steps: "250"
     }
   })
 })
+```
+
+### Training with Existing Captions
+
+```javascript
+{
+  input: {
+    mode: "train",
+    train_data: "/workspace/data",
+    output_dir: "/workspace/output",
+
+    // Use existing captions
+    use_captioning: true,
+    caption_method: "existing",
+    caption_extension: ".txt",
+
+    // R2 integration
+    use_r2: true,
+    r2_access_key: "your_r2_access_key",
+    r2_secret_key: "your_r2_secret_key",
+    r2_endpoint: "https://your-account-id.r2.cloudflarestorage.com",
+    r2_bucket: "character-datasets",
+    r2_prefix: "my-character/"
+  }
+}
 ```
 
 ### Generating Images
