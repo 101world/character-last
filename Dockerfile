@@ -146,8 +146,27 @@ RUN set -e && \
     apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
+# Add health check endpoint
+RUN echo '#!/bin/bash\n\
+echo "FLUX.1-dev Training Worker Health Check"\n\
+echo "======================================"\n\
+if [ -f "/workspace/models/flux1-dev.safetensors" ]; then\n\
+    echo "✅ FLUX.1-dev model: FOUND"\n\
+else\n\
+    echo "❌ FLUX.1-dev model: MISSING"\n\
+fi\n\
+if [ -f "/workspace/models/clip_l.safetensors" ]; then\n\
+    echo "✅ CLIP-L model: FOUND"\n\
+else\n\
+    echo "❌ CLIP-L model: MISSING"\n\
+fi\n\
+if [ -d "/workspace/kohya" ]; then\n\
+    echo "✅ Kohya scripts: FOUND"\n\
+else\n\
+    echo "❌ Kohya scripts: MISSING"\n\
+fi\n\
+echo "======================================"\n\
+echo "Health check completed at $(date)"' > /workspace/health_check.sh && chmod +x /workspace/health_check.sh
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy models from builder (cached layer)
