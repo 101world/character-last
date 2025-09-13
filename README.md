@@ -21,14 +21,33 @@ The worker automatically downloads and includes:
 - **T5-XXL**: Text encoder for T5-XXL (`t5xxl_fp16.safetensors`)
 - **AE**: AutoEncoder for FLUX.1 (`ae.safetensors`)
 
-## Training Parameters (FLUX.1-dev Optimized)
+## Character Training Parameters (FluxGym Style)
 
-- **Guidance Scale**: `1.0` (disabled for training, as recommended)
-- **Timestep Sampling**: `flux_shift` (recommended for FLUX.1)
-- **Model Prediction Type**: `raw` (recommended for FLUX.1)
-- **Discrete Flow Shift**: `3.1582` (for flux_shift sampling)
-- **Network Module**: `networks.lora_flux` (FLUX-specific LoRA)
-- **Learning Rate**: `1e-4` with constant scheduler
+**Character Name:**
+- `character_name`: Name of the character (used for output file naming)
+- Example: `"anya_forger"`, `"luffy"`, `"character_x"`
+
+**Character Trigger Word:**
+- `character_trigger`: Unique word to activate character features
+- Example: `"anya person"`, `"luffy style"`, `"charx"`
+- **Important**: This gets added to ALL training image captions
+
+**Captioning Process:**
+1. Upload character images to Cloudflare R2
+2. Worker downloads images automatically
+3. Generates captions: `"{character_trigger}, {blip_caption}"`
+4. Example: `"anya person, a young girl with pink hair"`
+
+**Training Workflow:**
+1. **Input**: Character images + trigger word
+2. **Captioning**: Auto-generates captions with trigger word
+3. **Training**: LoRA learns character features from trigger word
+4. **Output**: `character_name_lora.safetensors`
+
+**Sample Generation During Training:**
+- Uses trigger word in sample prompts to show progress
+- Example: `"anya person in a school uniform"`
+- Helps monitor LoRA learning progress
 
 ## Input Format
 
@@ -298,7 +317,7 @@ docker ps
 
 ## Usage Examples
 
-### Training a Character LoRA with Captioning and R2
+### Training a Character LoRA (FluxGym Style)
 
 ```javascript
 const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
@@ -310,33 +329,37 @@ const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
   body: JSON.stringify({
     input: {
       mode: "train",
-      train_data: "/workspace/data",
-      output_dir: "/workspace/output",
 
-      // Enable automatic captioning
-      use_captioning: true,
-      caption_method: "blip",
-      caption_extension: ".txt",
-      max_caption_length: 75,
+      // Character information (FluxGym style)
+      character_name: "anya_forger",
+      character_trigger: "anya person",
 
-      // Cloudflare R2 integration for your web app
+      // Cloudflare R2 integration
       use_r2: true,
       CLOUDFLARE_R2_ACCESS_KEY_ID: "ef926435442c79cb22a8397939f3f878",
       CLOUDFLARE_R2_SECRET_ACCESS_KEY: "da8c672469940a0b338d86c65b386fc7fe933549706e3aff10ce6d570ec82eb3",
       CLOUDFLARE_ACCOUNT_ID: "ced616f33f6492fd708a8e897b61b953",
       R2_BUCKET_NAME: "the-social-twin-storage",
-      r2_prefix: "kohya/Dataset/riya_bhatu_v1/Character/",
+      r2_prefix: "character_images/anya/",
 
-      // Custom training parameters
-      learning_rate: "2e-4",
-      max_train_steps: "2000",
-      train_batch_size: "2",
-      network_dim: "32",
-      save_every_n_steps: "250"
+      // Automatic captioning with trigger word
+      use_captioning: true,
+      caption_method: "blip",
+
+      // Training parameters
+      learning_rate: "1e-4",
+      max_train_steps: "1000",
+      network_dim: "16"
     }
   })
 })
 ```
+
+**What happens:**
+1. Downloads character images from R2
+2. Generates captions: `"anya person, [BLIP description]"`
+3. Trains LoRA that learns to respond to `"anya person"`
+4. Saves as `anya_forger_lora.safetensors`
 
 ### Training with Existing Captions
 

@@ -10,7 +10,19 @@ ENV TZ=UTC
 WORKDIR /workspace
 
 # Install build dependencies with proper caching
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN set -e && \
+    echo "Updating package lists with retry..." && \
+    for i in 1 2 3; do \
+        if apt-get update; then \
+            echo "Package list update successful"; \
+            break; \
+        else \
+            echo "Attempt $i failed, retrying in 5 seconds..."; \
+            sleep 5; \
+        fi; \
+    done && \
+    echo "Installing build packages..." && \
+    apt-get install -y --no-install-recommends \
     software-properties-common \
     wget \
     git \
@@ -26,6 +38,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libglib2.0-dev \
     pkg-config \
+    && echo "Cleaning up..." && \
+    apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
@@ -43,8 +57,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Download models in builder stage (cached)
 RUN mkdir -p /workspace/models && \
     echo "Downloading FLUX.1-dev model..." && \
-    wget -q --show-progress -O /workspace/models/flux1-dev.safetensors \
-        https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors && \
+    for i in 1 2 3; do \
+        if wget -q --show-progress -O /workspace/models/flux1-dev.safetensors \
+            https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors; then \
+            echo "FLUX.1-dev model downloaded successfully"; \
+            break; \
+        else \
+            echo "Attempt $i failed, retrying in 10 seconds..."; \
+            sleep 10; \
+        fi; \
+    done && \
     echo "Downloading AE model..." && \
     wget -q --show-progress -O /workspace/models/ae.safetensors \
         https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors && \
@@ -57,7 +79,15 @@ RUN mkdir -p /workspace/models && \
 
 # Clone repositories
 RUN echo "Cloning Kohya sd-scripts..." && \
-    git clone -b sd3 https://github.com/kohya-ss/sd-scripts.git /workspace/kohya && \
+    for i in 1 2 3; do \
+        if git clone -b sd3 https://github.com/kohya-ss/sd-scripts.git /workspace/kohya; then \
+            echo "Kohya repository cloned successfully"; \
+            break; \
+        else \
+            echo "Attempt $i failed, retrying in 5 seconds..."; \
+            sleep 5; \
+        fi; \
+    done && \
     echo "Cloning FluxGym..." && \
     git clone https://github.com/cocktailpeanut/fluxgym.git /workspace/fluxgym
 
@@ -72,7 +102,19 @@ ENV TZ=UTC
 WORKDIR /workspace
 
 # Install only runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN set -e && \
+    echo "Updating package lists with retry..." && \
+    for i in 1 2 3; do \
+        if apt-get update; then \
+            echo "Package list update successful"; \
+            break; \
+        else \
+            echo "Attempt $i failed, retrying in 5 seconds..."; \
+            sleep 5; \
+        fi; \
+    done && \
+    echo "Installing runtime packages..." && \
+    apt-get install -y --no-install-recommends \
     python3.10 \
     python3.10-venv \
     libglib2.0-0 \
@@ -80,6 +122,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libgomp1 \
     libstdc++6 \
+    && echo "Cleaning up..." && \
+    apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder

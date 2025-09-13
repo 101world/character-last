@@ -37,8 +37,8 @@ def download_dataset_from_r2(s3_client, bucket_name, r2_prefix, local_dir):
             s3_client.download_file(bucket_name, obj['Key'], local_path)
             print(f"Downloaded: {obj['Key']} -> {local_path}")
 
-def generate_captions_blip(image_dir, caption_extension=".txt", max_length=75):
-    """Generate captions using BLIP model"""
+def generate_captions_blip(image_dir, caption_extension=".txt", max_length=75, character_trigger=None):
+    """Generate captions using BLIP model with character trigger word"""
     processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-large")
     model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-large")
 
@@ -63,30 +63,30 @@ def generate_captions_blip(image_dir, caption_extension=".txt", max_length=75):
                     with torch.no_grad():
                         output = model.generate(**inputs, max_length=max_length)
 
-                    caption = processor.decode(output[0], skip_special_tokens=True)
+                    # Get base caption from BLIP
+                    base_caption = processor.decode(output[0], skip_special_tokens=True)
+
+                    # Add character trigger to caption (FluxGym style)
+                    if character_trigger:
+                        caption = f"{character_trigger}, {base_caption}"
+                    else:
+                        caption = base_caption
+
                     with open(caption_path, 'w', encoding='utf-8') as f:
                         f.write(caption)
 
-                    print(f"Generated caption for: {image_path}")
+                    print(f"Generated caption: {caption}")
 
                 except Exception as e:
                     print(f"Error processing {image_path}: {e}")
 
-def generate_captions_clip(image_dir, caption_extension=".txt"):
-    """Generate captions using CLIP model"""
+def generate_captions_clip(image_dir, caption_extension=".txt", character_trigger=None):
+    """Generate captions using CLIP model with character trigger word"""
     model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
     tokenizer = open_clip.get_tokenizer('ViT-B-32')
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
-
-    # This is a simplified CLIP captioning - in practice you'd want more sophisticated prompting
-    templates = [
-        "a photo of a {}",
-        "an image of a {}",
-        "picture of a {}",
-        "this is a {}"
-    ]
 
     image_extensions = ['.jpg', '.jpeg', '.png', '.webp']
 
@@ -106,12 +106,16 @@ def generate_captions_clip(image_dir, caption_extension=".txt"):
                         image_features = model.encode_image(image)
                         image_features /= image_features.norm(dim=-1, keepdim=True)
 
-                    # For simplicity, using a generic caption. In practice, you'd use a trained captioning model
-                    caption = "a high quality image of a character"
+                    # Create caption with character trigger (FluxGym style)
+                    if character_trigger:
+                        caption = f"{character_trigger}, a high quality character image"
+                    else:
+                        caption = "a high quality character image"
+
                     with open(caption_path, 'w', encoding='utf-8') as f:
                         f.write(caption)
 
-                    print(f"Generated CLIP-based caption for: {image_path}")
+                    print(f"Generated caption: {caption}")
 
                 except Exception as e:
                     print(f"Error processing {image_path}: {e}")
@@ -154,6 +158,10 @@ def handler(event):
         output_dir = input_data.get("output_dir", "/workspace/output")
         os.makedirs(output_dir, exist_ok=True)
 
+        # Character training parameters (FluxGym style)
+        character_name = input_data.get("character_name", "")
+        character_trigger = input_data.get("character_trigger", "")
+
         # Captioning parameters
         use_captioning = input_data.get("use_captioning", True)
         caption_extension = input_data.get("caption_extension", ".txt")
@@ -191,9 +199,21 @@ def handler(event):
         if use_captioning and caption_method != "existing":
             print(f"Generating captions using {caption_method} method...")
             if caption_method == "blip":
-                generate_captions_blip(train_data, caption_extension, max_caption_length)
+                generate_captions_blip(train_data, caption_extension, max_caption_length, character_trigger)
             elif caption_method == "clip":
-                generate_captions_clip(train_data, caption_extension)
+                generate_captions_clip(train_data, caption_extension, character_trigger)
+
+        # Validate character parameters (FluxGym style)
+        if not character_trigger:
+            print("Warning: No character trigger word provided. Consider adding one for better training results.")
+        if character_trigger:
+            print(f"Using character trigger: '{character_trigger}'")
+
+        # Set output name based on character (FluxGym style)
+        if character_name:
+            output_name = f"{character_name.replace(' ', '_')}_lora"
+        else:
+            output_name = "character_lora"
 
         # Use FLUX.1 training script with proper parameters
         cmd = [
@@ -204,7 +224,7 @@ def handler(event):
             "--ae", ae_path,
             "--train_data_dir", train_data,
             "--output_dir", output_dir,
-            "--output_name", "flux_lora",
+            "--output_name", output_name,
             "--network_module", "networks.lora_flux",
             f"--network_dim", network_dim,
             "--network_alpha", "1",
@@ -245,8 +265,18 @@ def handler(event):
         return {"status": "training complete", "output": output_dir}
 
     elif mode == "infer":
-        prompt = input_data.get("prompt", "a test image")
+        prompt = input_data.get("prompt", "a character portrait")
         output_path = "/workspace/output.png"
+
+        # Character parameters for inference (FluxGym style)
+        character_trigger = input_data.get("character_trigger", "")
+
+        # Integrate character trigger into prompt (FluxGym style)
+        if character_trigger:
+            enhanced_prompt = f"{character_trigger}, {prompt}"
+            print(f"Enhanced prompt: {enhanced_prompt}")
+        else:
+            enhanced_prompt = prompt
 
         # Cloudflare R2 parameters for inference
         use_r2 = input_data.get("use_r2", False)
@@ -272,7 +302,7 @@ def handler(event):
             "--clip_l", clip_l_path,
             "--t5xxl", t5xxl_path,
             "--ae", ae_path,
-            "--prompt", prompt,
+            "--prompt", enhanced_prompt,
             "--width", "1024",
             "--height", "1024",
             "--guidance_scale", "3.5",  # Default guidance for FLUX.1 inference
