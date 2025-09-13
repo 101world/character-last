@@ -22,14 +22,25 @@ def setup_cloudflare_r2(access_key, secret_key, endpoint, bucket_name):
 
 def test_r2_connection():
     """Test R2 connection and basic operations"""
-    # Test credentials (replace with your actual credentials)
-    r2_access_key = "ef926435442c79cb22a8397939f3f878"
-    r2_secret_key = "da8c672469940a0b338d86c65b386fc7fe933549706e3aff10ce6d570ec82eb3"
-    r2_account_id = "ced616f33f6492fd708a8e897b61b953"
-    r2_bucket = "the-social-twin-storage"
+    # Get credentials from environment variables
+    r2_access_key = os.getenv('CLOUDFLARE_R2_ACCESS_KEY_ID')
+    r2_secret_key = os.getenv('CLOUDFLARE_R2_SECRET_ACCESS_KEY')
+    r2_account_id = os.getenv('CLOUDFLARE_ACCOUNT_ID')
+    r2_bucket = os.getenv('R2_BUCKET_NAME')
+
+    if not all([r2_access_key, r2_secret_key, r2_account_id, r2_bucket]):
+        print("❌ Missing R2 environment variables. Please set:")
+        print("  CLOUDFLARE_R2_ACCESS_KEY_ID")
+        print("  CLOUDFLARE_R2_SECRET_ACCESS_KEY")
+        print("  CLOUDFLARE_ACCOUNT_ID")
+        print("  R2_BUCKET_NAME")
+        return False
+
     r2_endpoint = f"https://{r2_account_id}.r2.cloudflarestorage.com"
 
     print("Testing Cloudflare R2 connection...")
+    print(f"Endpoint: {r2_endpoint}")
+    print(f"Bucket: {r2_bucket}")
 
     try:
         s3_client, bucket_name = setup_cloudflare_r2(
@@ -45,8 +56,8 @@ def test_r2_connection():
         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
         if 'Contents' in response:
             print(f"✓ Found {len(response['Contents'])} objects in {prefix}")
-            for obj in response['Contents'][:3]:  # Show first 3
-                print(f"  - {obj['Key']}")
+            for obj in response['Contents'][:5]:  # Show first 5
+                print(f"  - {obj['Key']} ({obj['Size']} bytes)")
         else:
             print(f"✓ Bucket accessible, no objects found in {prefix}")
 

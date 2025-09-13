@@ -6,10 +6,6 @@ FROM nvidia/cuda:12.4.0-devel-ubuntu20.04 AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 
-# Configure DNS for better network connectivity
-RUN echo "nameserver 8.8.8.8" >> /etc/resolv.conf && \
-    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
-
 # Set working directory
 WORKDIR /workspace
 
