@@ -18,6 +18,9 @@ RUN pip install -r requirements.txt
 # Clone Kohya scripts
 RUN git clone https://github.com/kohya-ss/sd-scripts.git -b sd3 /workspace/kohya
 
+# Install Kohya's dependencies
+RUN pip install --no-cache-dir -r /workspace/kohya/requirements.txt
+
 # Copy application
 COPY handler.py .
 
