@@ -1,5 +1,7 @@
 {
   "input": {
-    "name": "John Doe"
+    "mode": "infer",
+    "model": "black-forest-labs/FLUX.1-dev",
+    "prompt": "a cinematic portrait of Rayhaan in a dark blue denim jacket, photorealistic, high detail, 8k"
   }
 }

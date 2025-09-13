@@ -1,65 +1,133 @@
-![RunPod Worker Template](https://cpjrphpz3t5wbwfe.public.blob.vercel-storage.com/worker-template_banner-zUuCAjwDuvfsINR6vKBhYvvm3TnZFB.jpeg)
+# FLUX.1-dev Kohya Training Worker
 
----
+This repository is a custom RunPod Serverless worker specifically optimized for FLUX.1-dev LoRA training and inference using Kohya's sd-scripts (sd3 branch).
 
-This repository serves as a starting point for creating your own custom RunPod Serverless worker. It provides a basic structure and configuration that you can build upon.
+## Features
 
----
+- **FLUX.1-dev Optimized**: Uses the sd3 branch of Kohya's sd-scripts with proper FLUX.1 parameters
+- **Complete Model Setup**: Includes all required models (FLUX.1-dev, CLIP-L, T5-XXL, AE)
+- **Optimized Training**: Pre-configured with recommended FLUX.1 training parameters
+- **High-Quality Inference**: FLUX.1-dev inference with proper guidance and sampling
+- **GPU Optimized**: CUDA 12.4 with PyTorch 2.6.0 for maximum performance
 
-[![RunPod](https://api.runpod.io/badge/runpod-workers/worker-template)](https://www.runpod.io/console/hub/runpod-workers/worker-template)
+## Model Requirements
 
----
+The worker automatically downloads and includes:
 
-## Getting Started
+- **FLUX.1-dev**: Main model (`flux1-dev.safetensors`)
+- **CLIP-L**: Text encoder for CLIP-Large (`clip_l.safetensors`)
+- **T5-XXL**: Text encoder for T5-XXL (`t5xxl_fp16.safetensors`)
+- **AE**: AutoEncoder for FLUX.1 (`ae.safetensors`)
 
-1.  **Use this template:** Create a new repository based on this template or clone it directly.
-2.  **Customize:** Modify the code and configuration files to implement your specific task.
-3.  **Test:** Run your worker locally to ensure it functions correctly.
-4.  **Deploy:** Connect your repository to RunPod or build and push the Docker image manually.
+## Training Parameters (FLUX.1-dev Optimized)
 
-## Customizing Your Worker
+- **Guidance Scale**: `1.0` (disabled for training, as recommended)
+- **Timestep Sampling**: `flux_shift` (recommended for FLUX.1)
+- **Model Prediction Type**: `raw` (recommended for FLUX.1)
+- **Discrete Flow Shift**: `3.1582` (for flux_shift sampling)
+- **Network Module**: `networks.lora_flux` (FLUX-specific LoRA)
+- **Learning Rate**: `1e-4` with constant scheduler
 
-- **`handler.py`:** This is the core of your worker.
-  - The `handler(event)` function is the entry point executed for each job.
-  - The `event` dictionary contains the job input under the `"input"` key.
-  - Modify this function to load your models, process the input and return the desired output.
-  - Consider implementing model loading outside the handler (e.g., globally or in an initialization function) if models are large and reused across jobs.
-- **`requirements.txt`:** Add any Python libraries your worker needs to this file. These will be installed via `uv` when the Docker image is built.
-- **`Dockerfile`:**
-  - This file defines the Docker image for your worker.
-  - It starts from a [RunPod base image (`runpod/base`)](https://github.com/runpod/containers/tree/main/official-templates/base) which includes CUDA, mulitple versions of python, uv, jupyter notebook and common dependencies.
-  - It installs dependencies from `requirements.txt` using `uv`.
-  - It copies your `src` directory into the image.
-  - You might need to add system dependencies (`apt-get install ...`), environment variables (`ENV`), or other setup steps here if required by your specific application.
-- **`test_input.json`:** Modify this file to provide relevant sample input for local testing.
+## Input Format
 
-## Testing Locally
+### Training
+```json
+{
+  "input": {
+    "mode": "train",
+    "train_data": "/workspace/data",
+    "output_dir": "/workspace/output"
+  }
+}
+```
 
-You can test your handler logic locally using the RunPod Python SDK. For detailed steps on setting up your local environment (creating a virtual environment, installing dependencies) and running the handler, please refer to the [RunPod Serverless Get Started Guide](https://docs.runpod.io/serverless/get-started).
+### Inference
+```json
+{
+  "input": {
+    "mode": "infer",
+    "prompt": "a cinematic portrait of a character in a dark blue denim jacket, photorealistic, high detail, 8k"
+  }
+}
+```
 
-1.  **Prepare Input:** Modify `test_input.json` with relevant sample input for your handler.
-2.  **Run the Handler:**
-    ```bash
-    python handler.py
-    ```
-    This will execute your `handler` function with the contents of [`test_input.json`](/test_input.json) as input.
+## Key Features
+
+- **FLUX.1-dev Specific**: Uses `flux_train_network.py` with FLUX-optimized parameters
+- **Memory Efficient**: Gradient checkpointing and text encoder caching enabled
+- **Mixed Precision**: FP16 training for optimal performance
+- **LoRA Training**: 16-rank LoRA with proper FLUX.1 architecture support
+- **Batch Processing**: Configurable batch sizes for different GPU memory
+
+## Technical Details
+
+### PyTorch Version
+- **PyTorch**: 2.6.0 (required for FLUX.1 support)
+- **CUDA**: 12.4
+- **Python**: 3.10+
+
+### Kohya Branch
+- **Branch**: `sd3` (FLUX.1 and SD3/SD3.5 support)
+- **Script**: `flux_train_network.py` for training
+- **Inference**: `flux_minimal_inference.py` for generation
 
 ## Deploying to RunPod
 
-There are two main ways to deploy your worker:
+1. Push this repo to GitHub
+2. Create new Serverless GPU Worker on RunPod
+3. Select GPU with at least 16GB VRAM (recommended: 24GB+)
+4. Connect your GitHub repo → build → deploy
 
-1.  **GitHub Integration (Recommended):**
+## Usage Examples
 
-    - Connect your GitHub repository to RunPod Serverless. RunPod will automatically build and deploy your worker whenever you push changes to your specified branch.
-    - For detailed instructions on setting up the GitHub integration, authorizing RunPod, and configuring your deployment, please refer to the [RunPod Deploy with GitHub Guide](https://docs.runpod.io/serverless/github-integration).
+### Training a LoRA
+```javascript
+const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_API_KEY"
+  },
+  body: JSON.stringify({
+    input: {
+      mode: "train",
+      train_data: "/workspace/data",
+      output_dir: "/workspace/output"
+    }
+  })
+})
+```
 
-2.  **Manual Docker Build & Push:**
-    - For detailed instructions on building the Docker image locally and pushing it to a container registry, please see the [RunPod Serverless Get Started Guide](https://docs.runpod.io/serverless/get-started#step-6-build-and-push-your-docker-image).
-    - Once pushed, create a new Template or Endpoint in the RunPod Serverless UI and point it to the image in your container registry.
+### Generating Images
+```javascript
+const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_API_KEY"
+  },
+  body: JSON.stringify({
+    input: {
+      mode: "infer",
+      prompt: "masterpiece, best quality, 1girl, in white dress, detailed face, beautiful eyes"
+    }
+  })
+})
+```
 
-## Further Information
+## Memory Optimization
 
+For different GPU memory sizes:
+
+- **24GB VRAM**: Default settings work optimally
+- **16GB VRAM**: Set batch size to 1, use `--blocks_to_swap`
+- **12GB VRAM**: Use `--blocks_to_swap 16` and 8bit AdamW
+- **10GB VRAM**: Use `--blocks_to_swap 22`, consider FP8 format for T5XXL
+- **8GB VRAM**: Use `--blocks_to_swap 28`, FP8 format recommended
+
+## Related Links
+
+- [Kohya sd-scripts (sd3 branch)](https://github.com/kohya-ss/sd-scripts/tree/sd3)
+- [FLUX.1 Training Documentation](https://github.com/kohya-ss/sd-scripts/blob/sd3/docs/flux_train_network.md)
 - [RunPod Serverless Documentation](https://docs.runpod.io/serverless/overview)
-- [Python SDK](https://github.com/runpod/runpod-python)
-- [Base Docker Images](https://github.com/runpod/containers/tree/main/official-templates/base)
-- [Community Discord](https://discord.gg/cUpRmau42Vd)
+- [FLUX.1-dev Model](https://huggingface.co/black-forest-labs/FLUX.1-dev)
