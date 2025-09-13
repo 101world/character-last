@@ -1,30 +1,44 @@
-# Core ML & DL
+# Core ML
 torch==2.6.0
 torchvision==0.21.0
+
+# Transformers / Hugging Face
 transformers>=4.40.0
 accelerate>=0.29.3
 safetensors>=0.4.3
 huggingface-hub>=0.22.2
 datasets>=2.19.1
+omegaconf>=2.3.0
+einops>=0.7.0
+
+# Utilities
+tqdm
+scipy
+runpod
 bitsandbytes>=0.43.0
-
-# Image processing
-Pillow>=9.5.0
+prodigyopt>=1.0
+lion-pytorch>=0.0.6
+wandb
+tensorboard
 opencv-python
+Pillow>=9.5.0
+diffusers>=0.27.0
 
-# Captioning & text encoders (optional for dataset prep)
+# Captioning dependencies
 open_clip_torch>=2.24.0
 sentence-transformers>=2.2.2
 ftfy
 regex
-
-# Cloudflare R2 integration
 boto3>=1.28.0
 botocore>=1.31.0
 
-# Utilities
-runpod
-tqdm
-einops>=0.7.0
-omegaconf>=2.3.0
+# TOML support for Kohya
 toml>=0.10.0
+
+# Monitoring / Optional
+psutil>=5.9.0
+GPUtil>=1.4.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+pandas>=2.0.0
+numpy>=1.24.0

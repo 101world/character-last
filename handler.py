@@ -37,69 +37,103 @@ def upload_to_r2(client, bucket_name, local_dir, r2_prefix="lora_outputs/"):
     return uploaded_files
 
 def download_flux_models(hf_token=None):
-    """Download FLUX.1-dev models if they don't exist"""
+    """Download all required FLUX.1-dev models if they don't exist"""
     logger.info("Checking for FLUX models...")
 
     models_dir = "/workspace/models"
     os.makedirs(models_dir, exist_ok=True)
 
-    # FLUX.1-dev model path
-    flux_model_path = os.path.join(models_dir, "flux.safetensors")
+    # Define all required models
+    required_models = [
+        ("black-forest-labs/FLUX.1-dev", "flux1-dev.safetensors"),
+        ("black-forest-labs/FLUX.1-dev", "ae.safetensors"),
+        ("comfyanonymous/flux_text_encoders", "clip_l.safetensors"),
+        ("comfyanonymous/flux_text_encoders", "t5xxl_fp16.safetensors"),
+    ]
 
-    if os.path.exists(flux_model_path):
-        logger.info("FLUX model already exists, skipping download")
-        return flux_model_path
+    # Check if all models exist
+    all_exist = True
+    model_paths = {}
+    for repo_id, filename in required_models:
+        model_path = os.path.join(models_dir, filename)
+        if not os.path.exists(model_path):
+            all_exist = False
+            break
+        else:
+            model_paths[filename] = model_path
 
-    # Need to download model
-    logger.info("FLUX model not found, downloading from HuggingFace...")
+    if all_exist:
+        logger.info("All FLUX models already exist, skipping download")
+        return model_paths.get("flux1-dev.safetensors", os.path.join(models_dir, "flux1-dev.safetensors"))
+
+    # Need to download models
+    logger.info("Some FLUX models missing, downloading from HuggingFace...")
 
     if not hf_token:
-        raise ValueError("HF_TOKEN required for downloading FLUX.1-dev model")
+        raise ValueError("HF_TOKEN required for downloading FLUX.1-dev models")
 
     try:
         # Login to HuggingFace
         login(hf_token)
         logger.info("Logged in to HuggingFace successfully")
 
-        # Download FLUX.1-dev model
-        logger.info("Downloading FLUX.1-dev model...")
-        downloaded_path = snapshot_download(
-            repo_id="black-forest-labs/FLUX.1-dev",
-            local_dir=models_dir,
-            local_dir_use_symlinks=False,
-            token=hf_token
-        )
+        # Download each required model
+        for repo_id, filename in required_models:
+            model_path = os.path.join(models_dir, filename)
+            if os.path.exists(model_path):
+                logger.info(f"Model {filename} already exists, skipping")
+                continue
 
-        # Find the safetensors file
-        for root, dirs, files in os.walk(downloaded_path):
-            for file in files:
-                if file.endswith(".safetensors") and "flux" in file.lower():
-                    flux_model_path = os.path.join(root, file)
-                    logger.info(f"Found FLUX model: {flux_model_path}")
-                    return flux_model_path
+            logger.info(f"Downloading {filename} from {repo_id}...")
+            try:
+                downloaded_path = snapshot_download(
+                    repo_id=repo_id,
+                    filename=filename,
+                    local_dir=models_dir,
+                    local_dir_use_symlinks=False,
+                    token=hf_token
+                )
+                logger.info(f"Successfully downloaded {filename}")
+            except Exception as e:
+                logger.error(f"Failed to download {filename}: {e}")
+                raise
 
-        raise FileNotFoundError("Could not find FLUX safetensors file after download")
+        # Verify all models were downloaded
+        for repo_id, filename in required_models:
+            model_path = os.path.join(models_dir, filename)
+            if not os.path.exists(model_path):
+                raise FileNotFoundError(f"Model {filename} was not found after download")
+
+        flux_model_path = os.path.join(models_dir, "flux1-dev.safetensors")
+        logger.info(f"All models downloaded successfully. Main model: {flux_model_path}")
+        return flux_model_path
 
     except Exception as e:
-        logger.error(f"Failed to download FLUX model: {e}")
+        logger.error(f"Failed to download FLUX models: {e}")
         raise
 
 def handler(job):
     try:
         data = job.get("input", {})
-        model_path = data.get("model_path", "/workspace/models/flux.safetensors")
+        model_path = data.get("model_path", "/workspace/models/flux1-dev.safetensors")
         train_dir = data.get("train_data", "/workspace/data")
         output_dir = data.get("output_dir", "/workspace/output")
         steps = str(data.get("steps", 1000))
         hf_token = data.get("HF_TOKEN")
         os.makedirs(output_dir, exist_ok=True)
 
-        # Download FLUX model if it doesn't exist
+        # Download FLUX models if they don't exist
         if not os.path.exists(model_path):
-            logger.info("Model not found locally, downloading from HuggingFace...")
+            logger.info("Models not found locally, downloading from HuggingFace...")
             model_path = download_flux_models(hf_token)
         else:
-            logger.info(f"Using existing model: {model_path}")
+            logger.info(f"Using existing models. Main model: {model_path}")
+
+        # Define paths for all required models
+        models_dir = "/workspace/models"
+        ae_path = os.path.join(models_dir, "ae.safetensors")
+        clip_l_path = os.path.join(models_dir, "clip_l.safetensors")
+        t5xxl_path = os.path.join(models_dir, "t5xxl_fp16.safetensors")
 
         # R2 config
         use_r2 = data.get("use_r2", False)
@@ -109,15 +143,13 @@ def handler(job):
         r2_bucket = data.get("R2_BUCKET_NAME")
         r2_prefix = data.get("r2_prefix", "lora_outputs/")
 
-        # Download FLUX model if not exists
-        hf_token = data.get("HF_TOKEN")
-        if hf_token:
-            download_flux_models(hf_token)
-
-        # Training command
+        # Training command with all required model paths
         cmd = [
             "python3", "/workspace/kohya/flux_train_network.py",
             f"--pretrained_model_name_or_path={model_path}",
+            f"--ae={ae_path}",
+            f"--clip_l={clip_l_path}",
+            f"--t5xxl={t5xxl_path}",
             f"--train_data_dir={train_dir}",
             f"--output_dir={output_dir}",
             "--network_module=networks.lora_flux",
