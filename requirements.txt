@@ -1,41 +1,30 @@
-# PyTorch and CUDA are installed separately in Dockerfile
-# torch==2.6.0
-# torchvision==0.21.0
-
+# Core ML & DL
+torch==2.6.0
+torchvision==0.21.0
 transformers>=4.40.0
 accelerate>=0.29.3
 safetensors>=0.4.3
 huggingface-hub>=0.22.2
 datasets>=2.19.1
-omegaconf>=2.3.0
-einops>=0.7.0
-tqdm
-scipy
-runpod
 bitsandbytes>=0.43.0
-prodigyopt>=1.0
-lion-pytorch>=0.0.6
-wandb
-tensorboard
-opencv-python
-Pillow>=9.5.0
-diffusers>=0.27.0
 
-# Captioning dependencies
+# Image processing
+Pillow>=9.5.0
+opencv-python
+
+# Captioning & text encoders (optional for dataset prep)
 open_clip_torch>=2.24.0
 sentence-transformers>=2.2.2
 ftfy
 regex
-boto3>=1.28.0  # For Cloudflare R2 integration
+
+# Cloudflare R2 integration
+boto3>=1.28.0
 botocore>=1.31.0
 
-# TOML support for Kohya configuration
+# Utilities
+runpod
+tqdm
+einops>=0.7.0
+omegaconf>=2.3.0
 toml>=0.10.0
-
-# Additional monitoring and utility dependencies
-psutil>=5.9.0  # System monitoring
-GPUtil>=1.4.0  # GPU monitoring
-matplotlib>=3.7.0  # For potential visualization
-seaborn>=0.12.0  # For potential visualization
-pandas>=2.0.0  # For data analysis
-numpy>=1.24.0  # Enhanced numerical operations
