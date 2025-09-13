@@ -29,6 +29,9 @@ regex
 boto3>=1.28.0  # For Cloudflare R2 integration
 botocore>=1.31.0
 
+# TOML support for Kohya configuration
+toml>=0.10.0
+
 # Additional monitoring and utility dependencies
 psutil>=5.9.0  # System monitoring
 GPUtil>=1.4.0  # GPU monitoring
