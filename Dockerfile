@@ -26,9 +26,9 @@ RUN set -e && \
     software-properties-common \
     wget \
     git \
-    python3.10 \
-    python3.10-dev \
-    python3.10-venv \
+    python3 \
+    python3-dev \
+    python3-venv \
     python3-pip \
     build-essential \
     libglib2.0-0 \
@@ -43,7 +43,7 @@ RUN set -e && \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
-RUN python3.10 -m venv /opt/venv
+RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Upgrade pip and install PyTorch with CUDA support
@@ -115,8 +115,8 @@ RUN set -e && \
     done && \
     echo "Installing runtime packages..." && \
     apt-get install -y --no-install-recommends \
-    python3.10 \
-    python3.10-venv \
+    python3 \
+    python3-venv \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
