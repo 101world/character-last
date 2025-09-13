@@ -26,9 +26,75 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def download_models_at_runtime():
+    """Download FLUX models at runtime if they don't exist"""
+    logger.info("Checking for required models...")
+
+    required_models = [
+        ("black-forest-labs/FLUX.1-dev", "flux1-dev.safetensors"),
+        ("black-forest-labs/FLUX.1-dev", "ae.safetensors"),
+        ("comfyanonymous/flux_text_encoders", "clip_l.safetensors"),
+        ("comfyanonymous/flux_text_encoders", "t5xxl_fp16.safetensors"),
+    ]
+
+    models_dir = "/workspace/models"
+    os.makedirs(models_dir, exist_ok=True)
+
+    # Check if all models exist
+    all_exist = True
+    for repo_id, filename in required_models:
+        model_path = os.path.join(models_dir, filename)
+        if not os.path.exists(model_path):
+            all_exist = False
+            break
+
+    if all_exist:
+        logger.info("All models already exist, skipping download")
+        return True
+
+    # Need to download models
+    logger.info("Models missing, downloading from Hugging Face...")
+
+    # Get token from environment
+    token = os.getenv('HF_TOKEN') or os.getenv('HUGGINGFACE_TOKEN')
+    if not token:
+        logger.error("No Hugging Face token found in environment variables HF_TOKEN or HUGGINGFACE_TOKEN")
+        return False
+
+    try:
+        from huggingface_hub import hf_hub_download
+
+        for repo_id, filename in required_models:
+            model_path = os.path.join(models_dir, filename)
+            if os.path.exists(model_path):
+                logger.info(f"Model {filename} already exists, skipping")
+                continue
+
+            logger.info(f"Downloading {filename} from {repo_id}...")
+            hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+                local_dir=models_dir,
+                local_dir_use_symlinks=False,
+                token=token
+            )
+            logger.info(f"Successfully downloaded {filename}")
+
+        logger.info("All models downloaded successfully!")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to download models: {e}")
+        return False
+
 def health_check():
     """Perform startup health checks for models and dependencies"""
     logger.info("Performing startup health checks...")
+
+    # First, ensure models are downloaded
+    if not download_models_at_runtime():
+        logger.error("Failed to download required models")
+        return False
 
     # Check CUDA availability
     if torch.cuda.is_available():

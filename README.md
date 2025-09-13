@@ -37,14 +37,42 @@ HUGGINGFACE_TOKEN=your_huggingface_token
 
 **⚠️ Warning**: The examples in this documentation show clean request payloads without credentials. If you see credentials in request examples elsewhere, they are for demonstration only and should never be used in production.
 
-## Model Requirements
+## Model Management Strategy
 
-The worker automatically downloads and includes:
+### Runtime Model Download (Recommended for RunPod)
 
-- **FLUX.1-dev**: Main model (`flux1-dev.safetensors`)
-- **CLIP-L**: Text encoder for CLIP-Large (`clip_l.safetensors`)
-- **T5-XXL**: Text encoder for T5-XXL (`t5xxl_fp16.safetensors`)
-- **AE**: AutoEncoder for FLUX.1 (`ae.safetensors`)
+**Why this approach:**
+- ✅ **Security**: No credentials baked into container image
+- ✅ **Flexibility**: Use different tokens for different deployments
+- ✅ **Smaller Images**: No large model files in container
+- ✅ **RunPod Compatible**: Perfect for serverless environments
+
+**How it works:**
+1. Container starts with minimal dependencies
+2. On first request, checks for required models
+3. If missing, downloads models using `HF_TOKEN` environment variable
+4. Models cached for subsequent requests
+
+### Environment Variables Required:
+```bash
+# Hugging Face (for model downloads)
+HF_TOKEN=your_huggingface_token_here
+
+# Cloudflare R2 (for data storage)
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+CLOUDFLARE_R2_ACCESS_KEY_ID=your_access_key
+CLOUDFLARE_R2_SECRET_ACCESS_KEY=your_secret_key
+R2_BUCKET_NAME=your_bucket_name
+```
+
+### Model Download Process:
+- **FLUX.1-dev**: 5.7GB (main model)
+- **AutoEncoder**: 335MB
+- **CLIP-L**: 246MB
+- **T5-XXL**: 4.7GB
+- **Total**: ~11GB downloaded on first run
+
+**Note**: First request may take 10-15 minutes for model downloads.
 
 ## Character Training Parameters (FluxGym Style)
 
@@ -201,17 +229,68 @@ The worker can automatically download your character training datasets from Clou
    ```
    This will verify your Cloudflare R2 credentials and upload/download functionality.
 
+## Hugging Face Authentication Setup
+
+**Important**: FLUX.1-dev models require authentication to download. You need a Hugging Face account and token.
+
+### Step 1: Create Hugging Face Account
+1. Go to [https://huggingface.co/join](https://huggingface.co/join)
+2. Create a free account
+
+### Step 2: Generate Access Token
+1. Go to [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+2. Click "New token"
+3. Name: `flux-training`
+4. Role: `Read` (sufficient for downloads)
+5. Copy the token (save it securely!)
+
+### Step 3: Set Environment Variable
+```bash
+# Windows PowerShell
+$env:HF_TOKEN = "your_token_here"
+
+# Windows Command Prompt
+set HF_TOKEN=your_token_here
+
+# Linux/macOS
+export HF_TOKEN=your_token_here
+```
+
+### Step 5: Test Authentication (Optional but Recommended)
+```bash
+# Test your Hugging Face setup before building
+python test_hf_auth.py
+```
+This will verify your token works and you can access the required models.
+
+### Step 6: Accept Model Terms
+Some models require you to accept their terms:
+1. Visit [https://huggingface.co/black-forest-labs/FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev)
+2. Click "Agree and access repository"
+3. This is required for the FLUX.1-dev model downloads
+
+**Note**: Without proper authentication, the build will fail with "exit code: 6" (authentication required).
+
 4. **Build the Docker Image**:
    ```bash
-   # Option 1: Use the build script (recommended)
-   ./build.sh
+   # Option 1: Use the build script (recommended - RunPod compatible)
+   ./build.bat
 
-   # Option 2: Build manually with multi-stage optimization
+   # Option 2: Build manually with Docker
    docker build -t flux-kohya-worker .
 
-   # Option 3: Build with specific CUDA architecture (for older GPUs)
-   docker build --build-arg CUDA_ARCHITECTURES=75 -t flux-kohya-worker .
+   # Option 3: Build with Podman (alternative to Docker)
+   podman build -t flux-kohya-worker .
+
+   # Option 4: Build without cache (if needed)
+   docker build --no-cache -t flux-kohya-worker .
    ```
+
+   **Important Notes:**
+   - ✅ **No HF_TOKEN needed at build time**
+   - ✅ **Models download automatically at runtime**
+   - ✅ **Perfect for RunPod serverless deployment**
+   - ✅ **Smaller, more secure container images**
    **Note**: The multi-stage build may take 20-30 minutes. The builder stage downloads models and dependencies, while the runtime stage creates a minimal production image.
 
 ## Multi-Stage Build Architecture
@@ -454,13 +533,15 @@ The worker returns R2 URLs in the response:
 
 ## Memory Optimization
 
-For different GPU memory sizes:
+For high-quality FLUX.1-dev training, we recommend using GPUs with at least 16GB VRAM. Here are optimization strategies for different memory configurations:
 
-- **24GB VRAM**: Default settings work optimally
-- **16GB VRAM**: Set batch size to 1, use `--blocks_to_swap`
-- **12GB VRAM**: Use `--blocks_to_swap 16` and 8bit AdamW
-- **10GB VRAM**: Use `--blocks_to_swap 22`, consider FP8 format for T5XXL
-- **8GB VRAM**: Use `--blocks_to_swap 28`, FP8 format recommended
+- **24GB+ VRAM**: Default settings work optimally for maximum quality
+- **16GB VRAM**: Set batch size to 1, use gradient checkpointing
+- **12GB VRAM**: Use `--blocks_to_swap 16`, 8bit AdamW, and gradient accumulation
+- **10GB VRAM**: Use `--blocks_to_swap 22`, reduce resolution to 512x512, increase text encoder learning rate
+- **8GB VRAM**: Use `--blocks_to_swap 28`, batch size 1, gradient accumulation steps 2-4
+
+**Note**: For character training, we prioritize full-precision FLUX.1-dev for maximum quality output. If memory is a constraint, consider using FLUX.1-schnell for faster training with slightly reduced quality.
 
 ## Related Links
 

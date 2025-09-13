@@ -6,6 +6,10 @@ FROM nvidia/cuda:12.4.0-devel-ubuntu20.04 AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 
+# Configure DNS for better network connectivity
+RUN echo "nameserver 8.8.8.8" >> /etc/resolv.conf && \
+    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+
 # Set working directory
 WORKDIR /workspace
 
@@ -74,28 +78,14 @@ RUN set -e && \
         fi; \
     done
 
-# Download models in builder stage (cached)
-RUN mkdir -p /workspace/models && \
-    echo "Downloading FLUX.1-dev model..." && \
-    for i in 1 2 3; do \
-        if wget -q --show-progress -O /workspace/models/flux1-dev.safetensors \
-            https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors; then \
-            echo "FLUX.1-dev model downloaded successfully"; \
-            break; \
-        else \
-            echo "Attempt $i failed, retrying in 10 seconds..."; \
-            sleep 10; \
-        fi; \
-    done && \
-    echo "Downloading AE model..." && \
-    wget -q --show-progress -O /workspace/models/ae.safetensors \
-        https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors && \
-    echo "Downloading CLIP-L model..." && \
-    wget -q --show-progress -O /workspace/models/clip_l.safetensors \
-        https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors && \
-    echo "Downloading T5XXL model..." && \
-    wget -q --show-progress -O /workspace/models/t5xxl_fp16.safetensors \
-        https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors
+# Copy model downloader script
+COPY download_models.py /workspace/download_models.py
+RUN chmod +x /workspace/download_models.py
+
+# Create models directory (will be populated at runtime)
+RUN mkdir -p /workspace/models
+
+# Skip model download during build - will happen at runtime on RunPod
 
 # Clone repositories
 RUN echo "Cloning Kohya sd-scripts..." && \
