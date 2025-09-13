@@ -286,18 +286,18 @@ def generate_captions_clip(image_dir, caption_extension=".txt", character_trigge
 def upload_training_results_to_r2(s3_client, bucket_name, output_dir, r2_prefix):
     """Upload training results to Cloudflare R2"""
     results_prefix = f"{r2_prefix.rstrip('/')}/training_results/"
-    
+
     for root, dirs, files in os.walk(output_dir):
         for file in files:
             local_path = os.path.join(root, file)
             # Create R2 key by replacing local path with results prefix
             r2_key = results_prefix + os.path.relpath(local_path, output_dir)
-            
+
             try:
                 s3_client.upload_file(local_path, bucket_name, r2_key)
-                print(f"Uploaded training result: {r2_key}")
+                logger.info(f"Uploaded training result: {r2_key}")
             except Exception as e:
-                print(f"Failed to upload {local_path}: {e}")
+                logger.error(f"Failed to upload {local_path}: {e}")
 
 def handler(event):
     """Main handler function with comprehensive error handling"""
@@ -342,106 +342,116 @@ def handler(event):
 
             # Character training parameters (FluxGym style)
             character_name = input_data.get("character_name", "")
-            character_trigger = input_data.get("character_trigger", "")        # Captioning parameters
-        use_captioning = input_data.get("use_captioning", True)
-        caption_extension = input_data.get("caption_extension", ".txt")
-        caption_method = input_data.get("caption_method", "blip")  # "blip", "clip", or "existing"
-        max_caption_length = input_data.get("max_caption_length", 75)
+            character_trigger = input_data.get("character_trigger", "")
 
-        # Cloudflare R2 parameters - using exact environment variable names
-        use_r2 = input_data.get("use_r2", False)
-        r2_access_key = input_data.get("CLOUDFLARE_R2_ACCESS_KEY_ID")
-        r2_secret_key = input_data.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
-        r2_account_id = input_data.get("CLOUDFLARE_ACCOUNT_ID")
-        r2_bucket = input_data.get("R2_BUCKET_NAME")
-        r2_prefix = input_data.get("r2_prefix", "kohya/Dataset/riya_bhatu_v1/Character/")
-        
-        # Construct R2 endpoint from account ID
-        if r2_account_id:
-            r2_endpoint = f"https://{r2_account_id}.r2.cloudflarestorage.com"
+            # Captioning parameters
+            use_captioning = input_data.get("use_captioning", True)
+            caption_extension = input_data.get("caption_extension", ".txt")
+            caption_method = input_data.get("caption_method", "blip")  # "blip", "clip", or "existing"
+            max_caption_length = input_data.get("max_caption_length", 75)
 
-        # Training hyperparameters
-        learning_rate = input_data.get("learning_rate", "1e-4")
-        max_train_steps = input_data.get("max_train_steps", "1000")
-        train_batch_size = input_data.get("train_batch_size", "1")
-        network_dim = input_data.get("network_dim", "16")
-        save_every_n_steps = input_data.get("save_every_n_steps", "500")
+            # Cloudflare R2 parameters - using exact environment variable names
+            use_r2 = input_data.get("use_r2", False)
+            r2_access_key = input_data.get("CLOUDFLARE_R2_ACCESS_KEY_ID")
+            r2_secret_key = input_data.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
+            r2_account_id = input_data.get("CLOUDFLARE_ACCOUNT_ID")
+            r2_bucket = input_data.get("R2_BUCKET_NAME")
+            r2_prefix = input_data.get("r2_prefix", "kohya/Dataset/riya_bhatu_v1/Character/")
+            
+            # Construct R2 endpoint from account ID
+            if r2_account_id:
+                r2_endpoint = f"https://{r2_account_id}.r2.cloudflarestorage.com"
 
-        # Download dataset from Cloudflare R2 if specified
-        if use_r2 and r2_access_key and r2_secret_key and r2_endpoint and r2_bucket:
-            print("Downloading dataset from Cloudflare R2...")
-            s3_client, bucket_name = setup_cloudflare_r2(
-                r2_access_key, r2_secret_key, r2_endpoint, r2_bucket
-            )
-            download_dataset_from_r2(s3_client, bucket_name, r2_prefix, train_data)
+            # Training hyperparameters
+            learning_rate = input_data.get("learning_rate", "1e-4")
+            max_train_steps = input_data.get("max_train_steps", "1000")
+            train_batch_size = input_data.get("train_batch_size", "1")
+            network_dim = input_data.get("network_dim", "16")
+            save_every_n_steps = input_data.get("save_every_n_steps", "500")
 
-        # Generate captions if requested
-        if use_captioning and caption_method != "existing":
-            print(f"Generating captions using {caption_method} method...")
-            if caption_method == "blip":
-                generate_captions_blip(train_data, caption_extension, max_caption_length, character_trigger)
-            elif caption_method == "clip":
-                generate_captions_clip(train_data, caption_extension, character_trigger)
+            # Download dataset from Cloudflare R2 if specified
+            if use_r2 and r2_access_key and r2_secret_key and r2_endpoint and r2_bucket:
+                logger.info("Downloading dataset from Cloudflare R2...")
+                s3_client, bucket_name = setup_cloudflare_r2(
+                    r2_access_key, r2_secret_key, r2_endpoint, r2_bucket
+                )
+                download_dataset_from_r2(s3_client, bucket_name, r2_prefix, train_data)
 
-        # Validate character parameters (FluxGym style)
-        if not character_trigger:
-            print("Warning: No character trigger word provided. Consider adding one for better training results.")
-        if character_trigger:
-            print(f"Using character trigger: '{character_trigger}'")
+            # Generate captions if requested
+            if use_captioning and caption_method != "existing":
+                logger.info(f"Generating captions using {caption_method} method...")
+                if caption_method == "blip":
+                    generate_captions_blip(train_data, caption_extension, max_caption_length, character_trigger)
+                elif caption_method == "clip":
+                    generate_captions_clip(train_data, caption_extension, character_trigger)
 
-        # Set output name based on character (FluxGym style)
-        if character_name:
-            output_name = f"{character_name.replace(' ', '_')}_lora"
-        else:
-            output_name = "character_lora"
+            # Validate character parameters (FluxGym style)
+            if not character_trigger:
+                logger.warning("No character trigger word provided. Consider adding one for better training results.")
+            if character_trigger:
+                logger.info(f"Using character trigger: '{character_trigger}'")
 
-        # Use FLUX.1 training script with proper parameters
-        cmd = [
-            "python3", "/workspace/kohya/flux_train_network.py",
-            "--pretrained_model_name_or_path", flux_model_path,
-            "--clip_l", clip_l_path,
-            "--t5xxl", t5xxl_path,
-            "--ae", ae_path,
-            "--train_data_dir", train_data,
-            "--output_dir", output_dir,
-            "--output_name", output_name,
-            "--network_module", "networks.lora_flux",
-            f"--network_dim", network_dim,
-            "--network_alpha", "1",
-            f"--learning_rate", learning_rate,
-            "--lr_scheduler", "constant",
-            f"--train_batch_size", train_batch_size,
-            f"--max_train_steps", max_train_steps,
-            f"--save_every_n_steps", save_every_n_steps,
-            "--mixed_precision", "fp16",
-            "--optimizer_type", "AdamW8bit",
-            "--max_data_loader_n_workers", "0",
-            "--seed", "42",
-            "--guidance_scale", "1.0",  # Disable guidance for FLUX.1-dev training
-            "--timestep_sampling", "flux_shift",  # Recommended for FLUX.1
-            "--model_prediction_type", "raw",  # Recommended for FLUX.1
-            "--discrete_flow_shift", "3.1582",  # For flux_shift sampling
-            "--gradient_checkpointing",
-            "--cache_text_encoder_outputs",
-            "--cache_latents",
-            "--save_model_as", "safetensors"
-        ]
+            # Set output name based on character (FluxGym style)
+            if character_name:
+                output_name = f"{character_name.replace(' ', '_')}_lora"
+            else:
+                output_name = "character_lora"
 
-        # Add captioning parameters if captions exist
-        if use_captioning:
-            cmd.extend([
-                f"--caption_extension", caption_extension,
-                "--shuffle_caption",
-                "--keep_tokens", "1"
-            ])
+            # Use FLUX.1 training script with proper parameters
+            cmd = [
+                "python3", "/workspace/kohya/flux_train_network.py",
+                "--pretrained_model_name_or_path", flux_model_path,
+                "--clip_l", clip_l_path,
+                "--t5xxl", t5xxl_path,
+                "--ae", ae_path,
+                "--train_data_dir", train_data,
+                "--output_dir", output_dir,
+                "--output_name", output_name,
+                "--network_module", "networks.lora_flux",
+                f"--network_dim", network_dim,
+                "--network_alpha", "1",
+                f"--learning_rate", learning_rate,
+                "--lr_scheduler", "constant",
+                f"--train_batch_size", train_batch_size,
+                f"--max_train_steps", max_train_steps,
+                f"--save_every_n_steps", save_every_n_steps,
+                "--mixed_precision", "fp16",
+                "--optimizer_type", "AdamW8bit",
+                "--max_data_loader_n_workers", "0",
+                "--seed", "42",
+                "--guidance_scale", "1.0",  # Disable guidance for FLUX.1-dev training
+                "--timestep_sampling", "flux_shift",  # Recommended for FLUX.1
+                "--model_prediction_type", "raw",  # Recommended for FLUX.1
+                "--discrete_flow_shift", "3.1582",  # For flux_shift sampling
+                "--gradient_checkpointing",
+                "--cache_text_encoder_outputs",
+                "--cache_latents",
+                "--save_model_as", "safetensors"
+            ]
 
-        print(f"Running training command: {' '.join(cmd)}")
-        subprocess.run(cmd)
-        
-        # Upload trained model to R2 if credentials provided
-        if use_r2 and r2_access_key and r2_secret_key and r2_endpoint and r2_bucket:
-            upload_training_results_to_r2(s3_client, bucket_name, output_dir, r2_prefix)
-        
+            # Add captioning parameters if captions exist
+            if use_captioning:
+                cmd.extend([
+                    f"--caption_extension", caption_extension,
+                    "--shuffle_caption",
+                    "--keep_tokens", "1"
+                ])
+
+            logger.info(f"Running training command: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                logger.error(f"Training failed with return code {result.returncode}")
+                logger.error(f"STDOUT: {result.stdout}")
+                logger.error(f"STDERR: {result.stderr}")
+                return {"error": "Training failed", "stdout": result.stdout, "stderr": result.stderr, "status": "failed"}
+            
+            logger.info("Training completed successfully")
+            
+            # Upload trained model to R2 if credentials provided
+            if use_r2 and r2_access_key and r2_secret_key and r2_endpoint and r2_bucket:
+                upload_training_results_to_r2(s3_client, bucket_name, output_dir, r2_prefix)
+            
             return {"status": "training complete", "output": output_dir}
 
         elif mode == "infer":
@@ -454,7 +464,7 @@ def handler(event):
             # Integrate character trigger into prompt (FluxGym style)
             if character_trigger:
                 enhanced_prompt = f"{character_trigger}, {prompt}"
-                print(f"Enhanced prompt: {enhanced_prompt}")
+                logger.info(f"Enhanced prompt: {enhanced_prompt}")
             else:
                 enhanced_prompt = prompt
 
@@ -489,18 +499,27 @@ def handler(event):
                 "--num_inference_steps", "20",
                 "--output_path", output_path
             ]
-            subprocess.run(cmd)
-
+            logger.info(f"Running inference command: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                logger.error(f"Inference failed with return code {result.returncode}")
+                logger.error(f"STDOUT: {result.stdout}")
+                logger.error(f"STDERR: {result.stderr}")
+                return {"error": "Inference failed", "stdout": result.stdout, "stderr": result.stderr, "status": "failed"}
+            
+            logger.info("Inference completed successfully")
+            
             # Upload generated image to R2 if credentials provided
             if s3_client and bucket_name:
                 inference_prefix = f"{r2_prefix.rstrip('/')}/generated_images/"
                 image_r2_key = inference_prefix + f"generated_{int(time.time())}.png"
                 try:
                     s3_client.upload_file(output_path, bucket_name, image_r2_key)
-                    print(f"Uploaded generated image: {image_r2_key}")
+                    logger.info(f"Uploaded generated image: {image_r2_key}")
                     return {"status": "inference complete", "image": output_path, "r2_url": f"https://{r2_account_id}.r2.cloudflarestorage.com/{image_r2_key}"}
                 except Exception as e:
-                    print(f"Failed to upload image: {e}")
+                    logger.error(f"Failed to upload image: {e}")
                     return {"status": "inference complete", "image": output_path}
 
             return {"status": "inference complete", "image": output_path}
