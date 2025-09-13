@@ -4,6 +4,7 @@ import subprocess
 import boto3
 from botocore.client import Config
 import logging
+from huggingface_hub import snapshot_download, login
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +36,54 @@ def upload_to_r2(client, bucket_name, local_dir, r2_prefix="lora_outputs/"):
                 uploaded_files.append(r2_key)
     return uploaded_files
 
+def download_flux_models(hf_token=None):
+    """Download FLUX.1-dev models if they don't exist"""
+    logger.info("Checking for FLUX models...")
+
+    models_dir = "/workspace/models"
+    os.makedirs(models_dir, exist_ok=True)
+
+    # FLUX.1-dev model path
+    flux_model_path = os.path.join(models_dir, "flux.safetensors")
+
+    if os.path.exists(flux_model_path):
+        logger.info("FLUX model already exists, skipping download")
+        return flux_model_path
+
+    # Need to download model
+    logger.info("FLUX model not found, downloading from HuggingFace...")
+
+    if not hf_token:
+        raise ValueError("HF_TOKEN required for downloading FLUX.1-dev model")
+
+    try:
+        # Login to HuggingFace
+        login(hf_token)
+        logger.info("Logged in to HuggingFace successfully")
+
+        # Download FLUX.1-dev model
+        logger.info("Downloading FLUX.1-dev model...")
+        downloaded_path = snapshot_download(
+            repo_id="black-forest-labs/FLUX.1-dev",
+            local_dir=models_dir,
+            local_dir_use_symlinks=False,
+            token=hf_token
+        )
+
+        # Find the safetensors file
+        for root, dirs, files in os.walk(downloaded_path):
+            for file in files:
+                if file.endswith(".safetensors") and "flux" in file.lower():
+                    flux_model_path = os.path.join(root, file)
+                    logger.info(f"Found FLUX model: {flux_model_path}")
+                    return flux_model_path
+
+        raise FileNotFoundError("Could not find FLUX safetensors file after download")
+
+    except Exception as e:
+        logger.error(f"Failed to download FLUX model: {e}")
+        raise
+
 def handler(job):
     try:
         data = job.get("input", {})
@@ -42,7 +91,15 @@ def handler(job):
         train_dir = data.get("train_data", "/workspace/data")
         output_dir = data.get("output_dir", "/workspace/output")
         steps = str(data.get("steps", 1000))
+        hf_token = data.get("HF_TOKEN")
         os.makedirs(output_dir, exist_ok=True)
+
+        # Download FLUX model if it doesn't exist
+        if not os.path.exists(model_path):
+            logger.info("Model not found locally, downloading from HuggingFace...")
+            model_path = download_flux_models(hf_token)
+        else:
+            logger.info(f"Using existing model: {model_path}")
 
         # R2 config
         use_r2 = data.get("use_r2", False)
@@ -51,6 +108,11 @@ def handler(job):
         r2_account = data.get("CLOUDFLARE_ACCOUNT_ID")
         r2_bucket = data.get("R2_BUCKET_NAME")
         r2_prefix = data.get("r2_prefix", "lora_outputs/")
+
+        # Download FLUX model if not exists
+        hf_token = data.get("HF_TOKEN")
+        if hf_token:
+            download_flux_models(hf_token)
 
         # Training command
         cmd = [

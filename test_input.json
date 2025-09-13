@@ -1,23 +1,15 @@
 {
   "input": {
-    "mode": "train",
-    "character_name": "riya_bhatu",
-    "character_trigger": "riya bhatu",
+    "model_path": "/workspace/models/flux.safetensors",
     "train_data": "/workspace/data",
     "output_dir": "/workspace/output",
-
-    "use_captioning": true,
-    "caption_method": "blip",
-    "caption_extension": ".txt",
-    "max_caption_length": 75,
-
-    "use_r2": true,
-    "r2_prefix": "kohya/Dataset/riya_bhatu_v1/Character/",
-
-    "learning_rate": "1e-4",
-    "max_train_steps": "1000",
-    "train_batch_size": "1",
-    "network_dim": "16",
-    "save_every_n_steps": "500"
+    "steps": 100,
+    "HF_TOKEN": "your_huggingface_token_here",
+    "use_r2": false,
+    "CLOUDFLARE_R2_ACCESS_KEY_ID": "your_r2_access_key",
+    "CLOUDFLARE_R2_SECRET_ACCESS_KEY": "your_r2_secret_key",
+    "CLOUDFLARE_ACCOUNT_ID": "your_account_id",
+    "R2_BUCKET_NAME": "your_bucket_name",
+    "r2_prefix": "lora_outputs/"
   }
 }
