@@ -1,54 +1,125 @@
-FROM nvidia/cuda:12.4.0-runtime-ubuntu20.04
+# Multi-stage build for FLUX.1-dev Kohya training worker
+# Stage 1: Builder stage for dependencies and model downloads
+FROM nvidia/cuda:12.4.0-devel-ubuntu20.04 AS builder
 
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Set working directory
 WORKDIR /workspace
 
-# Install system dependencies
-RUN apt-get update --fix-missing && \
-    apt-get install -y --no-install-recommends \
-    git \
+# Install build dependencies with proper caching
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
     wget \
-    python3 \
+    git \
+    python3.10 \
+    python3.10-dev \
+    python3.10-venv \
     python3-pip \
-    python3-dev \
     build-essential \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    libgthread-2.0-0 \
-    && apt-get clean \
+    libglib2.0-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONHASHSEED=random
-ENV CUDA_HOME=/usr/local/cuda
-ENV PATH=/usr/local/cuda/bin:$PATH
-ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+# Create virtual environment
+RUN python3.10 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Upgrade pip and install PyTorch
-RUN pip3 install --upgrade pip
-RUN pip3 install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124
+# Upgrade pip and install PyTorch with CUDA support
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124
 
 # Install Python dependencies
 COPY requirements.txt /workspace/
-RUN pip3 install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Verify installation
-RUN python3 -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}')"
+# Download models in builder stage (cached)
+RUN mkdir -p /workspace/models && \
+    echo "Downloading FLUX.1-dev model..." && \
+    wget -q --show-progress -O /workspace/models/flux1-dev.safetensors \
+        https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors && \
+    echo "Downloading AE model..." && \
+    wget -q --show-progress -O /workspace/models/ae.safetensors \
+        https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors && \
+    echo "Downloading CLIP-L model..." && \
+    wget -q --show-progress -O /workspace/models/clip_l.safetensors \
+        https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors && \
+    echo "Downloading T5XXL model..." && \
+    wget -q --show-progress -O /workspace/models/t5xxl_fp16.safetensors \
+        https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors
 
 # Clone repositories
-RUN git clone -b sd3 https://github.com/kohya-ss/sd-scripts.git /workspace/kohya
-RUN git clone https://github.com/cocktailpeanut/fluxgym.git /workspace/fluxgym
+RUN echo "Cloning Kohya sd-scripts..." && \
+    git clone -b sd3 https://github.com/kohya-ss/sd-scripts.git /workspace/kohya && \
+    echo "Cloning FluxGym..." && \
+    git clone https://github.com/cocktailpeanut/fluxgym.git /workspace/fluxgym
 
-# Download FLUX models
-RUN mkdir -p /workspace/models
-RUN wget -O /workspace/models/flux1-dev.safetensors https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors
-RUN wget -O /workspace/models/ae.safetensors https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors
-RUN wget -O /workspace/models/clip_l.safetensors https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors
-RUN wget -O /workspace/models/t5xxl_fp16.safetensors https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors
+# Stage 2: Runtime stage (minimal final image)
+FROM nvidia/cuda:12.4.0-runtime-ubuntu20.04
 
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Set working directory
+WORKDIR /workspace
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3.10-venv \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libgomp1 \
+    libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy models from builder (cached layer)
+COPY --from=builder /workspace/models /workspace/models
+
+# Copy repositories from builder
+COPY --from=builder /workspace/kohya /workspace/kohya
+COPY --from=builder /workspace/fluxgym /workspace/fluxgym
+
+# Set proper environment variables for CUDA and ML
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=/usr/local/cuda/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONHASHSEED=random
+
+# NVIDIA Container Toolkit environment variables
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Copy application code
 COPY handler.py /workspace/
+
+# Create output directory
+RUN mkdir -p /workspace/output
+
+# Verify CUDA installation
+RUN python3 -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}')"
+
+# Set proper permissions
+RUN chmod +x /workspace/handler.py
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 -c "import torch; assert torch.cuda.is_available()" || exit 1
+
+# Default command
 CMD ["python3", "handler.py"]

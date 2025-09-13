@@ -2,6 +2,7 @@ import runpod
 import subprocess
 import os
 import glob
+import time
 import boto3
 import json
 from huggingface_hub import snapshot_download, login
@@ -115,6 +116,22 @@ def generate_captions_clip(image_dir, caption_extension=".txt"):
                 except Exception as e:
                     print(f"Error processing {image_path}: {e}")
 
+def upload_training_results_to_r2(s3_client, bucket_name, output_dir, r2_prefix):
+    """Upload training results to Cloudflare R2"""
+    results_prefix = f"{r2_prefix.rstrip('/')}/training_results/"
+    
+    for root, dirs, files in os.walk(output_dir):
+        for file in files:
+            local_path = os.path.join(root, file)
+            # Create R2 key by replacing local path with results prefix
+            r2_key = results_prefix + os.path.relpath(local_path, output_dir)
+            
+            try:
+                s3_client.upload_file(local_path, bucket_name, r2_key)
+                print(f"Uploaded training result: {r2_key}")
+            except Exception as e:
+                print(f"Failed to upload {local_path}: {e}")
+
 def handler(event):
     input_data = event.get("input", {})
     mode = input_data.get("mode", "train")   # "train" or "infer"
@@ -220,11 +237,33 @@ def handler(event):
 
         print(f"Running training command: {' '.join(cmd)}")
         subprocess.run(cmd)
+        
+        # Upload trained model to R2 if credentials provided
+        if use_r2 and r2_access_key and r2_secret_key and r2_endpoint and r2_bucket:
+            upload_training_results_to_r2(s3_client, bucket_name, output_dir, r2_prefix)
+        
         return {"status": "training complete", "output": output_dir}
 
     elif mode == "infer":
         prompt = input_data.get("prompt", "a test image")
         output_path = "/workspace/output.png"
+
+        # Cloudflare R2 parameters for inference
+        use_r2 = input_data.get("use_r2", False)
+        r2_access_key = input_data.get("CLOUDFLARE_R2_ACCESS_KEY_ID")
+        r2_secret_key = input_data.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
+        r2_account_id = input_data.get("CLOUDFLARE_ACCOUNT_ID")
+        r2_bucket = input_data.get("R2_BUCKET_NAME")
+        r2_prefix = input_data.get("r2_prefix", "kohya/Dataset/riya_bhatu_v1/Character/")
+        
+        # Setup R2 client for inference
+        s3_client = None
+        bucket_name = None
+        if use_r2 and r2_access_key and r2_secret_key and r2_account_id and r2_bucket:
+            r2_endpoint = f"https://{r2_account_id}.r2.cloudflarestorage.com"
+            s3_client, bucket_name = setup_cloudflare_r2(
+                r2_access_key, r2_secret_key, r2_endpoint, r2_bucket
+            )
 
         # Use Kohya's FLUX inference script
         cmd = [
@@ -241,6 +280,18 @@ def handler(event):
             "--output_path", output_path
         ]
         subprocess.run(cmd)
+
+        # Upload generated image to R2 if credentials provided
+        if s3_client and bucket_name:
+            inference_prefix = f"{r2_prefix.rstrip('/')}/generated_images/"
+            image_r2_key = inference_prefix + f"generated_{int(time.time())}.png"
+            try:
+                s3_client.upload_file(output_path, bucket_name, image_r2_key)
+                print(f"Uploaded generated image: {image_r2_key}")
+                return {"status": "inference complete", "image": output_path, "r2_url": f"https://{r2_account_id}.r2.cloudflarestorage.com/{image_r2_key}"}
+            except Exception as e:
+                print(f"Failed to upload image: {e}")
+                return {"status": "inference complete", "image": output_path}
 
         return {"status": "inference complete", "image": output_path}
 

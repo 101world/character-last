@@ -149,6 +149,127 @@ The worker can automatically download your character training datasets from Clou
 2. **Connect Repository**:
    - Repository: `https://github.com/101world/character-last`
    - Branch: `main`
+   - Build Command: `pip install -r requirements.txt`
+
+3. **Test R2 Integration** (Optional):
+   ```bash
+   python test_r2_integration.py
+   ```
+   This will verify your Cloudflare R2 credentials and upload/download functionality.
+
+4. **Build the Docker Image**:
+   ```bash
+   # Option 1: Use the build script (recommended)
+   ./build.sh
+
+   # Option 2: Build manually with multi-stage optimization
+   docker build -t flux-kohya-worker .
+
+   # Option 3: Build with specific CUDA architecture (for older GPUs)
+   docker build --build-arg CUDA_ARCHITECTURES=75 -t flux-kohya-worker .
+   ```
+   **Note**: The multi-stage build may take 20-30 minutes. The builder stage downloads models and dependencies, while the runtime stage creates a minimal production image.
+
+## Multi-Stage Build Architecture
+
+The Dockerfile uses a modern multi-stage build approach:
+
+### Builder Stage (`nvidia/cuda:12.4.0-devel-ubuntu20.04`)
+- Downloads all FLUX.1-dev models (20GB+)
+- Installs build dependencies and Python packages
+- Clones Kohya and FluxGym repositories
+- Creates optimized virtual environment
+
+### Runtime Stage (`nvidia/cuda:12.4.0-runtime-ubuntu20.04`)
+- Minimal Ubuntu 20.04 with CUDA runtime
+- Only essential runtime dependencies
+- Pre-installed models and repositories from builder
+- Optimized for production deployment
+
+### Benefits:
+- **Faster builds**: Model downloads cached in builder stage
+- **Smaller images**: Runtime image excludes build tools
+- **Better caching**: Dependencies isolated from source code changes
+- **Production ready**: Follows ML container best practices
+
+## Troubleshooting Build Issues
+
+### Common Build Problems
+
+**Multi-stage build failures:**
+```bash
+# Clear Docker cache and rebuild
+docker system prune -a
+docker build --no-cache -t flux-kohya-worker .
+
+# Check build logs for specific stage failures
+docker build --progress=plain -t flux-kohya-worker .
+```
+
+**Model download failures:**
+- The builder stage includes progress indicators for downloads
+- If downloads fail, check internet connection and retry
+- Models are cached after first successful download
+
+**CUDA compatibility issues:**
+- Ensure your system has NVIDIA drivers compatible with CUDA 12.4
+- For RunPod deployment, use GPUs with Compute Capability 7.5+
+- Check GPU compatibility: `nvidia-smi --query-gpu=compute_cap --format=csv`
+
+**Disk space issues:**
+```bash
+# Check available space (need at least 50GB free)
+df -h
+
+# Clear Docker cache and system
+docker system prune -a
+docker volume prune -f
+```
+
+**Memory issues during build:**
+```bash
+# Increase Docker memory limit if building locally
+# Or use RunPod's cloud build environment
+```
+
+### Testing the Build Locally
+
+```bash
+# Build the image
+docker build -t flux-kohya-worker .
+
+# Test CUDA availability
+docker run --rm --gpus all flux-kohya-worker python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+
+# Test model loading
+docker run --rm --gpus all flux-kohya-worker python3 -c "import torch; from safetensors import safe_open; print('Models accessible')"
+```
+
+### Build Optimization Tips
+
+- **Use BuildKit**: Enable Docker BuildKit for faster builds
+  ```bash
+  export DOCKER_BUILDKIT=1
+  docker build -t flux-kohya-worker .
+  ```
+
+- **Layer Caching**: The multi-stage build maximizes Docker layer caching
+- **Parallel Downloads**: Models download in parallel where possible
+- **Dependency Optimization**: Python packages installed with `--no-cache-dir`
+
+### Health Checks
+
+The container includes built-in health checks:
+- CUDA availability verification
+- Model file integrity checks
+- Memory and GPU utilization monitoring
+
+Monitor health status:
+```bash
+docker ps
+# Look for "healthy" status in STATUS column
+```
+   - Branch: `main`
    - Handler: `handler.py`
    - Docker Context: `/`
 
@@ -253,10 +374,45 @@ const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
   body: JSON.stringify({
     input: {
       mode: "infer",
-      prompt: "masterpiece, best quality, 1girl, in white dress, detailed face, beautiful eyes"
+      prompt: "masterpiece, best quality, 1girl, in white dress, detailed face, beautiful eyes",
+
+      // Optional: Upload generated image to R2
+      use_r2: true,
+      CLOUDFLARE_R2_ACCESS_KEY_ID: "ef926435442c79cb22a8397939f3f878",
+      CLOUDFLARE_R2_SECRET_ACCESS_KEY: "da8c672469940a0b338d86c65b386fc7fe933549706e3aff10ce6d570ec82eb3",
+      CLOUDFLARE_ACCOUNT_ID: "ced616f33f6492fd708a8e897b61b953",
+      R2_BUCKET_NAME: "the-social-twin-storage",
+      r2_prefix: "kohya/Dataset/riya_bhatu_v1/Character/"
     }
   })
 })
+```
+
+## Accessing Your Outputs
+
+When using Cloudflare R2 integration, your trained models and generated images are automatically uploaded to your R2 bucket:
+
+### Trained LoRA Models
+- **Location**: `kohya/Dataset/riya_bhatu_v1/Character/trained_models/`
+- **Files**: 
+  - `lora.safetensors` - Your trained LoRA weights
+  - `lora.safetensors.toml` - Model configuration
+  - `last.safetensors` - Final checkpoint
+- **Access URL**: `https://ced616f33f6492fd708a8e897b61b953.r2.cloudflarestorage.com/kohya/Dataset/riya_bhatu_v1/Character/trained_models/lora.safetensors`
+
+### Generated Images
+- **Location**: `kohya/Dataset/riya_bhatu_v1/Character/generated_images/`
+- **Files**: `generated_[timestamp].png` - Timestamped generated images
+- **Access URL**: `https://ced616f33f6492fd708a8e897b61b953.r2.cloudflarestorage.com/kohya/Dataset/riya_bhatu_v1/Character/generated_images/`
+
+### Response Format
+The worker returns R2 URLs in the response:
+```json
+{
+  "status": "training complete",
+  "lora_path": "/workspace/output/lora.safetensors",
+  "r2_url": "https://ced616f33f6492fd708a8e897b61b953.r2.cloudflarestorage.com/kohya/Dataset/riya_bhatu_v1/Character/trained_models/lora.safetensors"
+}
 ```
 
 ## Memory Optimization
