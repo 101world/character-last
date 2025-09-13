@@ -4,7 +4,7 @@ import os
 import glob
 import boto3
 import json
-from huggingface_hub import snapshot_download
+from huggingface_hub import snapshot_download, login
 from botocore.client import Config
 import torch
 from PIL import Image
@@ -118,6 +118,12 @@ def generate_captions_clip(image_dir, caption_extension=".txt"):
 def handler(event):
     input_data = event.get("input", {})
     mode = input_data.get("mode", "train")   # "train" or "infer"
+
+    # Login to HuggingFace if token provided
+    hf_token = input_data.get("HUGGINGFACE_TOKEN")
+    if hf_token:
+        login(hf_token)
+        print("Logged in to HuggingFace successfully")
 
     # FLUX.1-dev model paths (downloaded in Dockerfile)
     flux_model_path = "/workspace/models/flux1-dev.safetensors"
