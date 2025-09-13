@@ -12,6 +12,31 @@ This repository is a custom RunPod Serverless worker specifically optimized for 
 - **High-Quality Inference**: FLUX.1-dev inference with proper guidance and sampling
 - **GPU Optimized**: CUDA 12.4 with PyTorch 2.6.0 for maximum performance
 
+## Security Best Practices
+
+**🔒 Important Security Notice**: Never pass sensitive credentials (API keys, access tokens) in request payloads. All Cloudflare R2 credentials must be configured as environment variables in your RunPod endpoint.
+
+### Environment Variables Setup
+
+Set these environment variables in your RunPod endpoint configuration:
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+CLOUDFLARE_R2_ACCESS_KEY_ID=your_access_key
+CLOUDFLARE_R2_SECRET_ACCESS_KEY=your_secret_key
+R2_BUCKET_NAME=your_bucket_name
+HUGGINGFACE_TOKEN=your_huggingface_token
+```
+
+### Why Environment Variables?
+
+- **Security**: Credentials are never exposed in API calls or logs
+- **Compliance**: Follows security best practices for cloud deployments
+- **Auditability**: Credentials are managed at the infrastructure level
+- **Rotation**: Easy to rotate credentials without code changes
+
+**⚠️ Warning**: The examples in this documentation show clean request payloads without credentials. If you see credentials in request examples elsewhere, they are for demonstration only and should never be used in production.
+
 ## Model Requirements
 
 The worker automatically downloads and includes:
@@ -292,7 +317,7 @@ docker ps
    - Handler: `handler.py`
    - Docker Context: `/`
 
-3. **Set Environment Variables**:
+3. **Set Environment Variables** (Required for Security):
    ```
    CLOUDFLARE_ACCOUNT_ID=your_account_id
    CLOUDFLARE_R2_ACCESS_KEY_ID=your_access_key
@@ -300,6 +325,7 @@ docker ps
    R2_BUCKET_NAME=your_bucket_name
    HUGGINGFACE_TOKEN=your_huggingface_token
    ```
+   **🔒 Security Note**: These must be set as environment variables, never in request payloads!
 
 4. **Configure Timeouts** (Critical for FLUX training):
    - **Execution Timeout**: 7200 seconds (2 hours) - for long training jobs
@@ -334,12 +360,8 @@ const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
       character_name: "anya_forger",
       character_trigger: "anya person",
 
-      // Cloudflare R2 integration
+      // Cloudflare R2 integration (credentials set via environment variables)
       use_r2: true,
-      CLOUDFLARE_R2_ACCESS_KEY_ID: "ef926435442c79cb22a8397939f3f878",
-      CLOUDFLARE_R2_SECRET_ACCESS_KEY: "da8c672469940a0b338d86c65b386fc7fe933549706e3aff10ce6d570ec82eb3",
-      CLOUDFLARE_ACCOUNT_ID: "ced616f33f6492fd708a8e897b61b953",
-      R2_BUCKET_NAME: "the-social-twin-storage",
       r2_prefix: "character_images/anya/",
 
       // Automatic captioning with trigger word
@@ -375,12 +397,8 @@ const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
     caption_method: "existing",
     caption_extension: ".txt",
 
-    // R2 integration
+    // R2 integration (credentials set via environment variables)
     use_r2: true,
-    CLOUDFLARE_R2_ACCESS_KEY_ID: "ef926435442c79cb22a8397939f3f878",
-    CLOUDFLARE_R2_SECRET_ACCESS_KEY: "da8c672469940a0b338d86c65b386fc7fe933549706e3aff10ce6d570ec82eb3",
-    CLOUDFLARE_ACCOUNT_ID: "ced616f33f6492fd708a8e897b61b953",
-    R2_BUCKET_NAME: "the-social-twin-storage",
     r2_prefix: "kohya/Dataset/riya_bhatu_v1/Character/"
   }
 }
@@ -399,12 +417,8 @@ const response = await fetch("https://api.runpod.ai/v2/YOUR-ENDPOINT/run", {
       mode: "infer",
       prompt: "masterpiece, best quality, 1girl, in white dress, detailed face, beautiful eyes",
 
-      // Optional: Upload generated image to R2
+      // Optional: Upload generated image to R2 (credentials set via environment variables)
       use_r2: true,
-      CLOUDFLARE_R2_ACCESS_KEY_ID: "ef926435442c79cb22a8397939f3f878",
-      CLOUDFLARE_R2_SECRET_ACCESS_KEY: "da8c672469940a0b338d86c65b386fc7fe933549706e3aff10ce6d570ec82eb3",
-      CLOUDFLARE_ACCOUNT_ID: "ced616f33f6492fd708a8e897b61b953",
-      R2_BUCKET_NAME: "the-social-twin-storage",
       r2_prefix: "kohya/Dataset/riya_bhatu_v1/Character/"
     }
   })
